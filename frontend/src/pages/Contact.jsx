@@ -280,11 +280,11 @@ export default function Contact() {
                                             Email
                                         </div>
                                         <a
-                                            href="mailto:hello@mirconsulting.com"
+                                            href="mailto:mirconsulting26@gmail.com"
                                             data-testid="contact-info-email"
                                             className="text-mir-text hover:text-mir-blue transition-colors"
                                         >
-                                            hello@mirconsulting.com
+                                            mirconsulting26@gmail.com
                                         </a>
                                     </div>
                                 </li>

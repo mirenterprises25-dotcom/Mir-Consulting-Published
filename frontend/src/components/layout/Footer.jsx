@@ -40,12 +40,12 @@ export default function Footer() {
 
                         <div className="mt-8 flex flex-col gap-3 text-sm text-white/65">
                             <a
-                                href="mailto:hello@mirconsulting.com"
+                                href="mailto:mirconsulting26@gmail.com"
                                 data-testid="footer-email"
                                 className="inline-flex items-center gap-3 hover:text-white transition-colors"
                             >
                                 <Mail className="w-4 h-4 text-mir-blueSoft" />
-                                hello@mirconsulting.com
+                                mirconsulting26@gmail.com
                             </a>
                             <div className="inline-flex items-center gap-3">
                                 <MapPin className="w-4 h-4 text-mir-blueSoft" />
