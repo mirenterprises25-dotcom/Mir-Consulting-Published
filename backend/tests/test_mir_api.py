@@ -5,7 +5,7 @@ import requests
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://mir-consulting-next.preview.emergentagent.com").rstrip("/")
 API = f"{BASE_URL}/api"
-ADMIN_PASSWORD = "mir-admin-2025"
+ADMIN_PASSWORD = "mir-admin-2026"
 
 
 @pytest.fixture(scope="module")

@@ -6,7 +6,7 @@ import requests
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL").rstrip("/")
 API = f"{BASE_URL}/api"
-ADMIN_PASSWORD = "mir-admin-2025"
+ADMIN_PASSWORD = "mir-admin-2026"
 
 
 # ---------- Fixtures ----------

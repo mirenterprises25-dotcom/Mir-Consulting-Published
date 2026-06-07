@@ -1,0 +1,54 @@
+{
+  "summary": "Iteration 4 end-to-end testing for MIR Consulting Admin Password Reset / Forgot Password (magic-link) flow. 13/13 new pytest cases pass (test_admin_reset_password.py) covering login (200/401), forgot-password (admin-email success, non-admin email returns generic 200 with backend WARNING log, rate-limit 3/15min surfaces 429), reset token lifecycle (invalid 400, valid GET 200, POST consumes & rotates bcrypt hash, single-use enforced, old password stops working, new password works), and regression on protected admin endpoints (/leads /posts /case-studies /invoices /stats) + public POST /api/leads (still 201, new-lead email sent — confirmed in backend logs: 'Email sent: New consultation request'). Frontend: /admin login card shows admin-forgot-password-link; clicking opens admin-forgot-dialog with admin-forgot-email + admin-forgot-submit, submitting returns generic 'Check your inbox' success state, admin-forgot-close closes the dialog. /admin/reset/:token route works for both invalid (admin-reset-invalid state shown) and valid (admin-reset-form -> admin-reset-done) tokens. After programmatic valid-token reset to a temp password, login at /admin succeeds and all 4 admin tabs (Leads, Insights, Case Studies, Invoices) render with data. Admin password restored to mir-admin-2026 at end of run; test_credentials.md remains accurate. Backend SMTP confirmed live: live reset email queued ('Password reset link generated' + 'Email sent: Reset your MIR Consulting admin password').",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/admin/login", "issue": "Rate-limit is 5/min and shared across test suites. The legacy test_mir_invoices_i18n.py + test_mir_api_v2.py + test_mir_api.py had hardcoded ADMIN_PASSWORD='mir-admin-2025' which silently caused 5x 401 -> 6th request 429 cascading failures. Updated to 'mir-admin-2026' to match the current DB-stored password (task statement confirmed this is the current value)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Admin > New invoice editor", "issues": ["(carryover from iter3) Date inputs use browser-native <input type=date> instead of shadcn Calendar/Popover."]},
+      {"screen": "Admin > Case Studies tab", "issues": ["(carryover from iter3) Typo 'New case studie' should be 'New case study'."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_admin_reset_password.py",
+    "/app/test_reports/pytest/pytest_iteration4.xml"
+  ],
+  "action_items": [
+    "(No-action / informational) /app/backend/.env still has ADMIN_PASSWORD=\"mir-admin-2025\" as bootstrap-only seed. The live admin password lives in admin_settings (currently mir-admin-2026). Leaving the env mismatch is intentional per code comment, but consider updating ADMIN_PASSWORD to mir-admin-2026 just to remove the gotcha for future devs reading /app/backend/.env.",
+    "Three legacy pytest cases (test_email_status_unconfigured, test_invoice_send_unconfigured_smtp, test_create_lead_with_smtp_unconfigured in test_mir_invoices_i18n.py) now FAIL because they assumed SMTP_APP_PASSWORD is empty; the env now has a real Google App Password ('bugx fptj cngm rnao') so the API correctly returns 200/200/201 instead of 503/503/regression. These are stale test assumptions — main agent should either delete those 3 tests or invert their expectations to confirm SMTP IS configured.",
+    "(Cosmetic, carryover) Replace native date pickers in invoice editor with shadcn Calendar.",
+    "(Cosmetic, carryover) Fix 'New case studie' typo on Case Studies tab."
+  ],
+  "critical_code_review_comments": [
+    "auth_admin.py — clean, focused (135 lines). Bcrypt hash starts with $2b$, SHA-256 hash on tokens (only hash stored, plain returned once), TTL index on expires_at + unique index on token_hash all wired in ensure_reset_indexes. Single-use is enforced via consume_reset_token's atomic update_one({used_at: None}) → second call returns modified_count=0 → 400.",
+    "server.py forgot-password endpoint: rate-limit '3/15minutes' is correct; non-admin email path returns generic {sent: True} AND logs WARNING — both verified end-to-end. SMTP send goes through BackgroundTasks so the HTTP response is fast (verified).",
+    "Token NOT exposed in any API response — confirmed by reading source and inspecting actual JSON bodies. Email link uses PUBLIC_BASE_URL/admin/reset/{plain_token}. PUBLIC_BASE_URL is set, so emails contain the correct URL.",
+    "/api/admin/reset-password/{token} GET returns expires_at — minor: this is fine because the token itself is required to query, so no enumeration risk, but consider returning only {valid: true} for the strictest hygiene.",
+    "Frontend AdminResetPassword.jsx has full state coverage (checking / invalid / form / done) with all required data-testids. Confirm-password is validated client-side; backend min_length=8 also enforced. Good.",
+    "Login endpoint rate-limit (5/min) is fine for product but is a footgun for test suites running back-to-back. Consider exempting localhost/internal IPs OR raise to 10/min in non-prod.",
+    "Legacy tests (test_mir_api.py / test_mir_api_v2.py / test_mir_invoices_i18n.py) hardcode passwords as module-level constants — fragile against password rotation. Recommend reading from /app/memory/test_credentials.md or an env var.",
+    "/app/backend/.env ADMIN_PASSWORD=mir-admin-2025 is out of sync with the actual live password (mir-admin-2026). Currently harmless because ensure_admin_seeded short-circuits on existing doc, but if admin_settings is ever wiped, the bootstrap would re-seed with the WRONG password.",
+    "server.py is now 928 lines — past 700 line threshold. Should be split into routers/ (admin_auth, leads, posts, case_studies, invoices)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_admin_reset_password.py (new — 13 cases)",
+    "/app/backend/tests/test_mir_api.py (ADMIN_PASSWORD constant updated 2025 -> 2026)",
+    "/app/backend/tests/test_mir_api_v2.py (ADMIN_PASSWORD constant updated 2025 -> 2026)",
+    "/app/backend/tests/test_mir_invoices_i18n.py (ADMIN_PASSWORD constant updated 2025 -> 2026)"
+  ],
+  "success_rate": {
+    "backend": "100% (13/13 reset-flow) — note 3 unrelated legacy SMTP-unconfigured tests now fail because SMTP got configured between iter3 and iter4; not regressions",
+    "frontend": "100% (forgot dialog open/submit/close, invalid token state, valid token reset, post-reset login, all 4 admin tabs render)"
+  },
+  "test_credentials": "Admin password: mir-admin-2026 (verified live, restored after rotation tests). Admin email: mirconsulting26@gmail.com. Static bearer: mir-admin-static-token-d7f3a91b5e6c4a8f.",
+  "seed_data_creation": "Reset-token cycle created 1 password_reset_tokens row (marked used). 1 TEST_reset_*@example.com lead created via regression test (left in DB — acceptable, prefix tagged for cleanup). UI flow created 1 reset_token row (used). No invoice/post/case-study seed data created.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Admin password is mir-admin-2026 (live DB) — bootstrap env still says 2025. To test reset flow without inbox: cd /app/backend && python -c \"import asyncio, sys; sys.path.insert(0,'.'); from motor.motor_asyncio import AsyncIOMotorClient; import auth_admin; asyncio.run((lambda: (lambda c, d: print(asyncio.run(auth_admin.create_reset_token(d))))(AsyncIOMotorClient('mongodb://localhost:27017'), AsyncIOMotorClient('mongodb://localhost:27017')['test_database']))())\" — or just follow the pattern in test_admin_reset_password.py::TestResetTokenLifecycle. Rate limits to be aware of: /admin/login=5/min, /admin/forgot-password=3/15min, /admin/reset-password=5/15min — sleep 60-90s between back-to-back regression runs that re-authenticate. The 3 SMTP-unconfigured tests in test_mir_invoices_i18n.py are now stale — main agent decision needed on whether to delete or invert them.",
+  "rca_of_the_issue": "N/A — feature is fully working end-to-end. The only 'noise' (4 ERROR/FAILED in initial full-suite run) traced back to (a) legacy tests using mir-admin-2025 password — fixed by updating constants, and (b) SMTP_APP_PASSWORD now being set so SMTP-unconfigured assertions no longer hold — reported to main agent."
+}
