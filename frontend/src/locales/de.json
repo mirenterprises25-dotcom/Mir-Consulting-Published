@@ -1,0 +1,28 @@
+{
+  "nav": {
+    "home": "Startseite",
+    "about": "Über uns",
+    "services": "Leistungen",
+    "industries": "Branchen",
+    "insights": "Insights",
+    "case_studies": "Fallstudien",
+    "contact": "Kontakt",
+    "book": "Beratung buchen"
+  },
+  "language": {
+    "label": "Sprache",
+    "en": "English",
+    "de": "Deutsch",
+    "es": "Español"
+  },
+  "home": {
+    "kicker": "Strategie · Technologie · Intelligenz",
+    "headline_1": "Beratung, die Komplexität",
+    "headline_2": "in messbaren Vorteil verwandelt.",
+    "lede": "MIR Consulting begleitet ambitionierte Unternehmen bei der Modernisierung von Abläufen, der Nutzung ihrer Daten und der Auslieferung skalierbarer Technologie — leise, präzise, mit Wirkung."
+  },
+  "footer": {
+    "tagline": "Strategie · Technologie · Intelligenz",
+    "rights": "Alle Rechte vorbehalten."
+  }
+}

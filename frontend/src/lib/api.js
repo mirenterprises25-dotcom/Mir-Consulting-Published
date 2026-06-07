@@ -84,3 +84,54 @@ export const deleteCaseStudy = (token, id) =>
     api
         .delete(`/admin/case-studies/${id}`, { headers: authHeader(token) })
         .then((r) => r.data);
+
+// ====== ADMIN: INVOICES ======
+export const fetchAdminInvoices = (token, params = {}) =>
+    api
+        .get("/admin/invoices", { headers: authHeader(token), params })
+        .then((r) => r.data);
+
+export const createInvoice = (token, payload) =>
+    api
+        .post("/admin/invoices", payload, { headers: authHeader(token) })
+        .then((r) => r.data);
+
+export const updateInvoice = (token, id, payload) =>
+    api
+        .put(`/admin/invoices/${id}`, payload, { headers: authHeader(token) })
+        .then((r) => r.data);
+
+export const deleteInvoice = (token, id) =>
+    api
+        .delete(`/admin/invoices/${id}`, { headers: authHeader(token) })
+        .then((r) => r.data);
+
+export const sendInvoiceEmail = (token, id) =>
+    api
+        .post(`/admin/invoices/${id}/send`, {}, { headers: authHeader(token) })
+        .then((r) => r.data);
+
+export const invoicePdfUrl = (id, token) =>
+    `${API}/admin/invoices/${id}/pdf?_t=${encodeURIComponent(token)}`;
+
+export const downloadInvoicePdf = async (token, id, number) => {
+    const res = await api.get(`/admin/invoices/${id}/pdf`, {
+        headers: authHeader(token),
+        responseType: "blob",
+    });
+    const blob = new Blob([res.data], { type: "application/pdf" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${number || "invoice"}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+};
+
+export const publicInvoiceUrl = (token) =>
+    `${BACKEND_URL.replace(/\/$/, "")}/api/invoices/public/${token}/pdf`;
+
+export const fetchEmailStatus = (token) =>
+    api.get("/admin/email-status", { headers: authHeader(token) }).then((r) => r.data);

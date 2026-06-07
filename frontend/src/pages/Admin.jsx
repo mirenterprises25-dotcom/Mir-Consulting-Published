@@ -19,6 +19,7 @@ import {
     Search,
     Eye,
     Save,
+    Receipt,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -72,6 +73,7 @@ import {
     updateCaseStudy,
     deleteCaseStudy,
 } from "@/lib/api";
+import InvoicesPanel from "@/pages/admin/InvoicesPanel";
 
 const TOKEN_KEY = "mir_admin_token";
 
@@ -208,6 +210,8 @@ function LoginScreen({ password, setPassword, onLogin, loading }) {
 // -------------------------------------------------------------
 function Dashboard({ token, onLogout, onAuthExpired }) {
     const [stats, setStats] = React.useState(null);
+    const [tab, setTab] = React.useState("leads");
+    const [invoicePrefill, setInvoicePrefill] = React.useState(null);
 
     const loadStats = React.useCallback(async () => {
         try {
@@ -224,6 +228,11 @@ function Dashboard({ token, onLogout, onAuthExpired }) {
     React.useEffect(() => {
         loadStats();
     }, [loadStats]);
+
+    const triggerInvoiceFromLead = (lead) => {
+        setInvoicePrefill({ ...lead, _ts: Date.now() }); // _ts forces re-trigger
+        setTab("invoices");
+    };
 
     return (
         <div className="min-h-screen bg-mir-surface" data-testid="admin-dashboard-page">
@@ -266,8 +275,8 @@ function Dashboard({ token, onLogout, onAuthExpired }) {
             <main className="max-w-7xl mx-auto px-6 lg:px-8 py-10">
                 <StatsCards stats={stats} />
 
-                <Tabs defaultValue="leads" className="mt-10">
-                    <TabsList className="bg-white border border-mir-border rounded-none p-1 h-auto">
+                <Tabs value={tab} onValueChange={setTab} className="mt-10">
+                    <TabsList className="bg-white border border-mir-border rounded-none p-1 h-auto flex-wrap">
                         <TabsTrigger
                             value="leads"
                             data-testid="admin-tab-leads"
@@ -292,6 +301,14 @@ function Dashboard({ token, onLogout, onAuthExpired }) {
                             <Briefcase className="w-4 h-4 mr-2" />
                             Case Studies
                         </TabsTrigger>
+                        <TabsTrigger
+                            value="invoices"
+                            data-testid="admin-tab-invoices"
+                            className="rounded-none data-[state=active]:bg-mir-midnight data-[state=active]:text-white text-mir-text px-5 py-2.5 text-sm"
+                        >
+                            <Receipt className="w-4 h-4 mr-2" />
+                            Invoices
+                        </TabsTrigger>
                     </TabsList>
 
                     <TabsContent value="leads" className="mt-6">
@@ -299,6 +316,7 @@ function Dashboard({ token, onLogout, onAuthExpired }) {
                             token={token}
                             onAuthExpired={onAuthExpired}
                             onChange={loadStats}
+                            onCreateInvoice={triggerInvoiceFromLead}
                         />
                     </TabsContent>
                     <TabsContent value="insights" className="mt-6">
@@ -313,6 +331,14 @@ function Dashboard({ token, onLogout, onAuthExpired }) {
                             token={token}
                             onAuthExpired={onAuthExpired}
                             onChange={loadStats}
+                        />
+                    </TabsContent>
+                    <TabsContent value="invoices" className="mt-6">
+                        <InvoicesPanel
+                            token={token}
+                            onAuthExpired={onAuthExpired}
+                            onChange={loadStats}
+                            prefillLead={invoicePrefill}
                         />
                     </TabsContent>
                 </Tabs>
@@ -343,10 +369,10 @@ function StatsCards({ stats }) {
             testId: "admin-stat-posts",
         },
         {
-            label: "Published case studies",
-            value: stats?.case_studies_published,
-            icon: Briefcase,
-            testId: "admin-stat-case-studies",
+            label: "Outstanding invoices",
+            value: stats?.invoices_outstanding,
+            icon: Receipt,
+            testId: "admin-stat-invoices",
         },
     ];
     return (
@@ -371,7 +397,7 @@ function StatsCards({ stats }) {
 }
 
 // -------------------------------------------------------------
-function LeadsPanel({ token, onAuthExpired, onChange }) {
+function LeadsPanel({ token, onAuthExpired, onChange, onCreateInvoice }) {
     const [leads, setLeads] = React.useState([]);
     const [loading, setLoading] = React.useState(false);
     const [statusFilter, setStatusFilter] = React.useState("all");
@@ -594,6 +620,7 @@ function LeadsPanel({ token, onAuthExpired, onChange }) {
                 onClose={() => setActive(null)}
                 onChangeStatus={changeStatus}
                 onSaveNotes={saveNotes}
+                onCreateInvoice={onCreateInvoice}
             />
 
             <ConfirmDialog
@@ -613,7 +640,7 @@ function LeadsPanel({ token, onAuthExpired, onChange }) {
 }
 
 // -------------------------------------------------------------
-function LeadDrawer({ lead, onClose, onChangeStatus, onSaveNotes }) {
+function LeadDrawer({ lead, onClose, onChangeStatus, onSaveNotes, onCreateInvoice }) {
     const [notes, setNotes] = React.useState("");
     React.useEffect(() => {
         setNotes(lead?.notes || "");
@@ -708,14 +735,29 @@ function LeadDrawer({ lead, onClose, onChangeStatus, onSaveNotes }) {
                                 placeholder="Capture internal context, follow-ups, next steps..."
                                 className={`${inputCls} mt-2`}
                             />
-                            <button
-                                onClick={() => onSaveNotes(lead, notes)}
-                                data-testid="admin-drawer-save-notes"
-                                className={`${btnPrimary} mt-3`}
-                            >
-                                <Save className="w-4 h-4" />
-                                Save notes
-                            </button>
+                            <div className="flex flex-wrap items-center gap-3 mt-3">
+                                <button
+                                    onClick={() => onSaveNotes(lead, notes)}
+                                    data-testid="admin-drawer-save-notes"
+                                    className={btnPrimary}
+                                >
+                                    <Save className="w-4 h-4" />
+                                    Save notes
+                                </button>
+                                {onCreateInvoice && (
+                                    <button
+                                        onClick={() => {
+                                            onCreateInvoice(lead);
+                                            onClose();
+                                        }}
+                                        data-testid="admin-drawer-create-invoice"
+                                        className={btnGhost}
+                                    >
+                                        <Receipt className="w-4 h-4" />
+                                        Create invoice for this lead
+                                    </button>
+                                )}
+                            </div>
                         </div>
                     </>
                 )}

@@ -1,5 +1,5 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header, Request
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header, Request, BackgroundTasks
+from fastapi.responses import JSONResponse, Response
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -15,6 +15,9 @@ from typing import List, Optional, Literal
 import uuid
 import secrets
 from datetime import datetime, timezone
+
+from email_service import send_new_lead_notification, send_invoice_email, is_configured as smtp_is_configured
+from invoice_pdf import render_invoice_pdf, fmt_money
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -194,10 +197,11 @@ async def company():
 
 @api_router.post("/leads", response_model=Lead, status_code=201)
 @limiter.limit("5/minute")
-async def create_lead(request: Request, payload: LeadCreate):
+async def create_lead(request: Request, payload: LeadCreate, background: BackgroundTasks):
     lead = Lead(**payload.model_dump())
     await db.leads.insert_one(lead.model_dump())
     logger.info(f"New lead: {lead.email} ({lead.full_name})")
+    background.add_task(send_new_lead_notification, lead.model_dump())
     return lead
 
 
@@ -324,6 +328,11 @@ async def admin_stats(_: bool = Depends(require_admin)):
     posts_published = await db.posts.count_documents({"status": "published"})
     cs_total = await db.case_studies.count_documents({})
     cs_published = await db.case_studies.count_documents({"status": "published"})
+    invoices_total = await db.invoices.count_documents({})
+    invoices_outstanding = await db.invoices.count_documents(
+        {"status": {"$in": ["sent", "overdue"]}}
+    )
+    invoices_paid = await db.invoices.count_documents({"status": "paid"})
     return {
         "total_leads": total,
         "new_leads": new_count,
@@ -332,6 +341,9 @@ async def admin_stats(_: bool = Depends(require_admin)):
         "posts_published": posts_published,
         "case_studies_total": cs_total,
         "case_studies_published": cs_published,
+        "invoices_total": invoices_total,
+        "invoices_outstanding": invoices_outstanding,
+        "invoices_paid": invoices_paid,
     }
 
 
@@ -495,6 +507,284 @@ async def admin_delete_case_study(
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Case study not found")
     return {"deleted": True}
+
+
+# ====================== INVOICES ======================
+SUPPORTED_CURRENCIES = ("EUR", "USD", "GBP", "INR", "CHF", "JPY", "AED")
+INVOICE_STATUSES = ("draft", "sent", "paid", "overdue", "void")
+
+
+class InvoiceLineItem(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    description: str = Field(min_length=1, max_length=400)
+    quantity: float = Field(ge=0)
+    rate: float = Field(ge=0)
+
+
+class InvoiceCreate(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    client_name: str = Field(min_length=1, max_length=160)
+    client_email: Optional[EmailStr] = None
+    client_company: Optional[str] = Field(default=None, max_length=160)
+    client_address: Optional[str] = Field(default=None, max_length=800)
+    currency: Literal["EUR", "USD", "GBP", "INR", "CHF", "JPY", "AED"] = "EUR"
+    issue_date: str  # ISO date "YYYY-MM-DD"
+    due_date: str
+    line_items: List[InvoiceLineItem] = Field(min_length=1)
+    tax_rate: float = Field(default=0, ge=0, le=100)
+    notes: Optional[str] = Field(default=None, max_length=2000)
+    status: Literal["draft", "sent", "paid", "overdue", "void"] = "draft"
+    lead_id: Optional[str] = None
+
+
+class Invoice(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    number: str
+    public_token: str = Field(default_factory=lambda: secrets.token_urlsafe(16))
+    client_name: str
+    client_email: Optional[str] = None
+    client_company: Optional[str] = None
+    client_address: Optional[str] = None
+    currency: str = "EUR"
+    issue_date: str
+    due_date: str
+    line_items: List[dict] = Field(default_factory=list)
+    subtotal: float = 0.0
+    tax_rate: float = 0.0
+    tax_amount: float = 0.0
+    total: float = 0.0
+    notes: Optional[str] = None
+    status: Literal["draft", "sent", "paid", "overdue", "void"] = "draft"
+    lead_id: Optional[str] = None
+    sent_at: Optional[str] = None
+    paid_at: Optional[str] = None
+    created_at: str = Field(default_factory=utc_now_iso)
+    updated_at: str = Field(default_factory=utc_now_iso)
+
+
+async def _next_invoice_number() -> str:
+    year = datetime.now(timezone.utc).year
+    prefix = f"INV-{year}-"
+    last = await db.invoices.find_one(
+        {"number": {"$regex": f"^{prefix}"}},
+        sort=[("number", -1)],
+        projection={"_id": 0, "number": 1},
+    )
+    n = 1
+    if last:
+        try:
+            n = int(last["number"].split("-")[-1]) + 1
+        except (ValueError, IndexError):
+            n = 1
+    return f"{prefix}{n:04d}"
+
+
+def _compute_totals(line_items: List[dict], tax_rate: float) -> tuple[List[dict], float, float, float]:
+    enriched = []
+    subtotal = 0.0
+    for it in line_items:
+        qty = float(it.get("quantity", 0))
+        rate = float(it.get("rate", 0))
+        amount = round(qty * rate, 2)
+        enriched.append({
+            "description": it.get("description", ""),
+            "quantity": qty,
+            "rate": rate,
+            "amount": amount,
+        })
+        subtotal += amount
+    subtotal = round(subtotal, 2)
+    tax_amount = round(subtotal * (tax_rate / 100.0), 2)
+    total = round(subtotal + tax_amount, 2)
+    return enriched, subtotal, tax_amount, total
+
+
+def _public_url_for(token: str) -> Optional[str]:
+    base = os.environ.get("PUBLIC_BASE_URL", "").rstrip("/")
+    if not base:
+        return None
+    return f"{base}/invoice/{token}"
+
+
+@api_router.get("/admin/email-status")
+async def email_status(_: bool = Depends(require_admin)):
+    return {"smtp_configured": smtp_is_configured(), "from_email": COMPANY_EMAIL}
+
+
+@api_router.get("/admin/invoices", response_model=List[Invoice])
+async def list_invoices(
+    status: Optional[str] = None,
+    q: Optional[str] = None,
+    _: bool = Depends(require_admin),
+):
+    query: dict = {}
+    if status and status in INVOICE_STATUSES:
+        query["status"] = status
+    if q:
+        regex = {"$regex": q, "$options": "i"}
+        query["$or"] = [
+            {"number": regex},
+            {"client_name": regex},
+            {"client_email": regex},
+            {"client_company": regex},
+        ]
+    rows = (
+        await db.invoices.find(query, {"_id": 0})
+        .sort("created_at", -1)
+        .to_list(500)
+    )
+    return rows
+
+
+@api_router.post("/admin/invoices", response_model=Invoice, status_code=201)
+async def create_invoice(
+    payload: InvoiceCreate, _: bool = Depends(require_admin)
+):
+    line_items, subtotal, tax_amount, total = _compute_totals(
+        [li.model_dump() for li in payload.line_items], payload.tax_rate
+    )
+    number = await _next_invoice_number()
+    inv = Invoice(
+        number=number,
+        client_name=payload.client_name,
+        client_email=payload.client_email,
+        client_company=payload.client_company,
+        client_address=payload.client_address,
+        currency=payload.currency,
+        issue_date=payload.issue_date,
+        due_date=payload.due_date,
+        line_items=line_items,
+        subtotal=subtotal,
+        tax_rate=payload.tax_rate,
+        tax_amount=tax_amount,
+        total=total,
+        notes=payload.notes,
+        status=payload.status,
+        lead_id=payload.lead_id,
+    )
+    await db.invoices.insert_one(inv.model_dump())
+    return inv
+
+
+@api_router.get("/admin/invoices/{invoice_id}", response_model=Invoice)
+async def get_invoice(invoice_id: str, _: bool = Depends(require_admin)):
+    doc = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    return doc
+
+
+@api_router.put("/admin/invoices/{invoice_id}", response_model=Invoice)
+async def update_invoice(
+    invoice_id: str,
+    payload: InvoiceCreate,
+    _: bool = Depends(require_admin),
+):
+    existing = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    line_items, subtotal, tax_amount, total = _compute_totals(
+        [li.model_dump() for li in payload.line_items], payload.tax_rate
+    )
+    updates = {
+        "client_name": payload.client_name,
+        "client_email": payload.client_email,
+        "client_company": payload.client_company,
+        "client_address": payload.client_address,
+        "currency": payload.currency,
+        "issue_date": payload.issue_date,
+        "due_date": payload.due_date,
+        "line_items": line_items,
+        "subtotal": subtotal,
+        "tax_rate": payload.tax_rate,
+        "tax_amount": tax_amount,
+        "total": total,
+        "notes": payload.notes,
+        "status": payload.status,
+        "lead_id": payload.lead_id,
+        "updated_at": utc_now_iso(),
+    }
+    if payload.status == "paid" and existing.get("status") != "paid":
+        updates["paid_at"] = utc_now_iso()
+    await db.invoices.update_one({"id": invoice_id}, {"$set": updates})
+    doc = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
+    return doc
+
+
+@api_router.delete("/admin/invoices/{invoice_id}")
+async def delete_invoice(invoice_id: str, _: bool = Depends(require_admin)):
+    result = await db.invoices.delete_one({"id": invoice_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    return {"deleted": True}
+
+
+@api_router.get("/admin/invoices/{invoice_id}/pdf")
+async def download_invoice_pdf(invoice_id: str, _: bool = Depends(require_admin)):
+    doc = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    pdf = render_invoice_pdf(doc, company={"name": "MIR Consulting", "tagline": "Strategy · Technology · Intelligence", "email": COMPANY_EMAIL, "footer": "MIR Consulting — generated electronically. Valid without signature."})
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{doc["number"]}.pdf"'},
+    )
+
+
+@api_router.post("/admin/invoices/{invoice_id}/send")
+async def send_invoice(invoice_id: str, _: bool = Depends(require_admin)):
+    doc = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    if not doc.get("client_email"):
+        raise HTTPException(status_code=400, detail="Client email is required to send")
+    if not smtp_is_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="Email is not configured. Add SMTP_USER and SMTP_APP_PASSWORD to backend/.env",
+        )
+    pdf = render_invoice_pdf(doc, company={"name": "MIR Consulting", "tagline": "Strategy · Technology · Intelligence", "email": COMPANY_EMAIL, "footer": "MIR Consulting — generated electronically. Valid without signature."})
+    ok = send_invoice_email(
+        recipient=doc["client_email"],
+        invoice_number=doc["number"],
+        client_name=doc["client_name"],
+        total_display=fmt_money(doc.get("total", 0), doc.get("currency", "EUR")),
+        due_date=doc.get("due_date", ""),
+        pdf_bytes=pdf,
+        public_url=_public_url_for(doc["public_token"]),
+    )
+    if not ok:
+        raise HTTPException(status_code=502, detail="Failed to send email (check SMTP credentials)")
+    await db.invoices.update_one(
+        {"id": invoice_id},
+        {"$set": {"status": "sent", "sent_at": utc_now_iso(), "updated_at": utc_now_iso()}},
+    )
+    return {"sent": True}
+
+
+# Public invoice view (token-based; no auth)
+@api_router.get("/invoices/public/{token}")
+async def public_invoice(token: str):
+    doc = await db.invoices.find_one({"public_token": token}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    # never expose admin-y fields beyond what's public
+    return doc
+
+
+@api_router.get("/invoices/public/{token}/pdf")
+async def public_invoice_pdf(token: str):
+    doc = await db.invoices.find_one({"public_token": token}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    pdf = render_invoice_pdf(doc, company={"name": "MIR Consulting", "tagline": "Strategy · Technology · Intelligence", "email": COMPANY_EMAIL, "footer": "MIR Consulting — generated electronically. Valid without signature."})
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{doc["number"]}.pdf"'},
+    )
 
 
 app.include_router(api_router)

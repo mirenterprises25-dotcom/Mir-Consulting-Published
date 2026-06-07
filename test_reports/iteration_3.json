@@ -1,0 +1,41 @@
+{
+  "summary": "Iteration 3 end-to-end testing for MIR Consulting (Invoices CRUD + PDF + email-status + i18n DE/ES + regression). 19 new pytest cases pass (test_mir_invoices_i18n.py) and all 27 prior cases still green (test_mir_api_v2.py) = 46/46 backend tests passing. Frontend: language switcher EN/DE/ES on desktop + mobile, localStorage 'mir_lang' persists, admin Invoices tab with stat card, New invoice editor with live totals (verified €1,000 subtotal + 19% tax => €1,190 total), Save & Finalize creates INV-2026-#### with monotonic suffixes (saw 0001 & 0002), per-row Download/Copy/Send testids present, Send without SMTP shows 503 + error toast, outstanding-invoices stat increments 0 -> 1, and 'Create invoice for this lead' pre-fills client_name + email from the drawer.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Admin > New invoice editor", "issues": ["Date inputs use the browser native <input type=date> picker rather than a shadcn calendar (minor — inconsistent with rest of the design system but functional)."]},
+      {"screen": "Admin > Case Studies tab", "issues": ["Pre-existing copy bug from iter2 still present: 'New case studie' should be 'New case study'."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_mir_invoices_i18n.py",
+    "/app/backend/tests/test_mir_api_v2.py",
+    "/app/test_reports/pytest/pytest_iteration3.xml"
+  ],
+  "action_items": [
+    "(Cosmetic) Replace browser-native date pickers in the invoice editor with the shadcn Calendar/Popover for visual consistency.",
+    "(Cosmetic) Fix 'New case studie' label on Case Studies admin tab.",
+    "(Optional) Add data-testids on the invoice editor inputs themselves (admin-invoice-save / admin-invoice-add-item / admin-invoice-li-* are referenced in the request but only client-name/email/currency/tax-rate were found in the DOM). The flow still works through placeholders + roles, but adding the missing testids will make future regression scripts more robust."
+  ],
+  "critical_code_review_comments": [
+    "backend/server.py is now 803 lines — still readable but past the comfort threshold. Consider splitting invoices into routers/invoices.py.",
+    "Invoice number generation uses an unindexed regex on db.invoices.number — fine at MVP scale, but at high volume it will be a hot path. Add a unique index on 'number' and consider a small counter document.",
+    "InvoiceCreate has issue_date/due_date as free-form str without validation; a malformed date would still be accepted and only fail at PDF/format time. Consider pydantic date type with str-coercion.",
+    "_public_url_for relies on PUBLIC_BASE_URL env var (currently empty); when empty the 'Online view' link is silently omitted from invoice emails. Frontend constructs ${REACT_APP_BACKEND_URL}/api/invoices/public/{token}/pdf for the public link, which IS the public PDF — confirmed returns 200 + application/pdf.",
+    "Frontend Admin.jsx + InvoicesPanel.jsx carry /* eslint-disable */ as a workaround for a React 19 effect rule — flagged by the request as intentional; long-term, refactor effects out of set-state-in-effect patterns instead of suppressing.",
+    "Send button click does HTTP 503 → surfaces in console as 'Failed to load resource' (expected). UX-wise the error toast is shown; good.",
+    "send_new_lead_notification is dispatched via BackgroundTasks: confirmed POST /api/leads returns 201 immediately even when SMTP_APP_PASSWORD is empty. Logs show 'SMTP not configured — skipping email'."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_mir_invoices_i18n.py (new)"
+  ],
+  "success_rate": { "backend": "100% (46/46)", "frontend": "100% (all required flows)" },
+  "test_credentials": "Admin password mir-admin-2025 verified; static admin token from backend/.env.",
+  "seed_data_creation": "Pytest module cleans up its own invoices + the regression lead. UI test created 1 invoice ('TEST UI Client') and cleaned it up via API afterward. 'rl_test@example.com' lead (from previous iter2 rate-limit run) was used read-only to verify the 'Create invoice for this lead' flow.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend regression cmd: REACT_APP_BACKEND_URL=<url> pytest /app/backend/tests/ -v. Both files (test_mir_api_v2.py + test_mir_invoices_i18n.py) are idempotent and self-cleaning. SMTP_APP_PASSWORD is empty by design — the 503-on-send path is the correct expectation; do NOT try to wire a real account. Invoice editor input data-testids are limited to admin-invoice-{client-name,client-email,currency,tax-rate}; description/qty/rate inputs are addressable via placeholder='Service or product' and type='number' (3rd & 4th number input on a single-line invoice). Row actions: admin-invoice-{download,copy-link,send}-{id}. Mobile testids: mobile-language-{en,de,es} are inside the hamburger Sheet — open the sheet before querying.",
+  "rca_of_the_issue": "N/A — no blocking bugs."
+}
