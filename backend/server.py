@@ -604,7 +604,7 @@ def _public_url_for(token: str) -> Optional[str]:
     base = os.environ.get("PUBLIC_BASE_URL", "").rstrip("/")
     if not base:
         return None
-    return f"{base}/invoice/{token}"
+    return f"{base}/api/invoices/public/{token}/pdf"
 
 
 @api_router.get("/admin/email-status")
