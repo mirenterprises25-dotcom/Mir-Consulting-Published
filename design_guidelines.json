@@ -1,0 +1,102 @@
+{
+  "theme": "Dark",
+  "archetype": "Premium Enterprise Dark",
+  "colors": {
+    "background": "hsl(222, 47%, 4%)",
+    "surface": "hsl(220, 48%, 10%)",
+    "surface_hover": "hsl(220, 48%, 15%)",
+    "primary": "hsl(216, 100%, 50%)",
+    "primary_hover": "hsl(216, 100%, 60%)",
+    "text_primary": "hsl(210, 40%, 98%)",
+    "text_secondary": "hsl(215, 16%, 65%)",
+    "border": "hsl(217, 33%, 17%)",
+    "border_focus": "hsl(216, 100%, 50%)",
+    "success": "hsl(142, 71%, 45%)",
+    "warning": "hsl(38, 92%, 50%)",
+    "error": "hsl(348, 83%, 47%)"
+  },
+  "typography": {
+    "heading_font": "Outfit",
+    "body_font": "Manrope",
+    "scale": {
+      "h1": "text-5xl sm:text-6xl tracking-tighter font-light",
+      "h2": "text-4xl sm:text-5xl tracking-tight font-medium",
+      "h3": "text-2xl sm:text-3xl tracking-tight font-medium",
+      "h4": "text-lg sm:text-xl font-medium",
+      "body": "text-base leading-relaxed text-slate-300",
+      "small": "text-sm tracking-wide text-slate-400",
+      "overline": "text-xs uppercase tracking-[0.2em] font-bold text-blue-500"
+    }
+  },
+  "spacing_and_layout": {
+    "section_padding": "py-24 md:py-32",
+    "container": "max-w-7xl mx-auto px-6 lg:px-8",
+    "grid_strategy_data": "grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6",
+    "grid_strategy_bento": "grid-cols-1 md:grid-cols-8 lg:grid-cols-12 gap-8",
+    "card_padding": "p-8 md:p-10",
+    "border_radius": "rounded-none"
+  },
+  "surfaces_and_borders": {
+    "header": "backdrop-blur-xl bg-black/60 border-b border-white/10 z-50",
+    "card": "bg-slate-900/40 border border-white/5 rounded-none hover:border-blue-500/50 hover:bg-slate-900/60 transition-all duration-300",
+    "card_solid": "bg-slate-900 border border-white/10 rounded-none",
+    "button_primary": "bg-blue-600 text-white rounded-none px-8 py-4 font-medium hover:bg-blue-500 transition-colors inline-flex items-center justify-center",
+    "button_secondary": "bg-transparent text-white border border-white/20 rounded-none px-8 py-4 font-medium hover:border-white/50 transition-colors inline-flex items-center justify-center"
+  },
+  "animations": {
+    "hover": "transition-all duration-300 ease-out",
+    "page_load": "framer-motion initial opacity-0 y-4, animate opacity-100 y-0, staggerChildren 0.1",
+    "scroll": "framer-motion whileInView opacity-1 y-0, initial opacity-0 y-8, viewport once: true",
+    "reduced_motion": "respect prefers-reduced-motion using tailwind motion-safe variant"
+  },
+  "components": {
+    "navbar": "Sticky header. Logo: 'MIR Consulting' in Outfit font, bold. Desktop links with hover:text-blue-400. CTA 'Book Consultation'.",
+    "hero": "Dark abstract geometric background (10-20% opacity). Left-aligned content: overline, H1, subtext, CTA group.",
+    "trust_indicators": "Muted grid of industry domains/capabilities below hero.",
+    "services_preview": "Grid of cards. Each card uses 1px subtle border, Phosphor duotone icon, heading, text, and 'Learn more' link.",
+    "industries_bento": "Bento layout. Mix of image-background cards with dark overlays and solid color info cards.",
+    "contact_form": "Shadcn UI form components. Dark inputs (bg-transparent, border-white/20). Focus states must use border-blue-500.",
+    "admin_dashboard": "Clean, dense data table using Shadcn Table component. Solid dark background, distinct from marketing pages."
+  },
+  "media": {
+    "icon_library": "@phosphor-icons/react",
+    "image_urls": [
+      {
+        "category": "hero_background",
+        "url": "https://images.unsplash.com/photo-1644088379091-d574269d422f?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2MzR8MHwxfHNlYXJjaHwxfHxhYnN0cmFjdCUyMGJsdWUlMjBnZW9tZXRyaWMlMjBuZXR3b3JrJTIwZGF0YXxlbnwwfHx8fDE3ODA4NDQ1NTF8MA&ixlib=rb-4.1.0&q=85",
+        "description": "Abstract blue geometric lines. Apply opacity-20 and blend-screen for a subtle corporate tech feel."
+      },
+      {
+        "category": "about_preview",
+        "url": "https://images.pexels.com/photos/7108269/pexels-photo-7108269.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "description": "Corporate office meeting. Professional consulting scenario."
+      },
+      {
+        "category": "industry_logistics",
+        "url": "https://images.unsplash.com/photo-1557761469-f29c6e201784?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA3MDR8MHwxfHNlYXJjaHwxfHxpbmR1c3RyaWFsJTIwbG9naXN0aWNzJTIwd2FyZWhvdXNlJTIwYWJzdHJhY3R8ZW58MHx8fHwxNzgwODQ0NTUyfDA&ixlib=rb-4.1.0&q=85",
+        "description": "Logistics and warehouse facility for industry deep dive."
+      },
+      {
+        "category": "abstract_tech",
+        "url": "https://images.pexels.com/photos/8640331/pexels-photo-8640331.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "description": "Glowing neon blue optical fibers for IT consulting visuals."
+      }
+    ]
+  },
+  "accessibility_and_testing": {
+    "contrast": "Ensure all text meets WCAG AA 4.5:1 ratio. Text over images MUST have text-shadow or a dark overlay (bg-black/60).",
+    "interactive": "All interactive elements MUST have visible hover, active, and focus states. Focus ring should be blue-500.",
+    "testing": "All interactive and key informational elements MUST include a data-testid attribute in kebab-case."
+  },
+  "instructions_to_main_agent": [
+    "Build the website as a hybrid_fullstack application with pages: Home, About, Services, Industries, Case Studies, Insights, Contact, and Admin.",
+    "Install Google Fonts 'Outfit' and 'Manrope' via next/font or standard HTML.",
+    "Configure tailwind.config.js with the custom colors and fonts defined above.",
+    "Use pure HTML + Tailwind for marketing layout structures to allow asymmetrical bento grids and custom borders.",
+    "Use Shadcn UI components ONLY for forms (Input, Textarea, Form, Button) and Dashboard elements (Table, Tabs).",
+    "Implement Framer Motion for scroll-triggered reveal animations across sections.",
+    "Enforce a sharp, enterprise-grade aesthetic by avoiding rounded corners (use rounded-none).",
+    "Never use generic placeholder text/images; integrate the Unsplash URLs provided.",
+    "Add 'data-testid' to every button, link, and form input."
+  ]
+}
