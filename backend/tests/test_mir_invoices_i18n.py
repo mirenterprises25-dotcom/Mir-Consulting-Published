@@ -17,11 +17,12 @@ def auth_headers():
 
 
 # ============ email-status ============
-def test_email_status_unconfigured(auth_headers):
+def test_email_status_configured(auth_headers):
+    """SMTP is now configured with a real Gmail App Password — should report True."""
     r = requests.get(f"{API}/admin/email-status", headers=auth_headers)
     assert r.status_code == 200
     body = r.json()
-    assert body["smtp_configured"] is False
+    assert body["smtp_configured"] is True
     assert body["from_email"] == "mirconsulting26@gmail.com"
 
 
@@ -141,12 +142,13 @@ def test_invoice_pdf_all_currencies(auth_headers):
         assert len(r.content) > 1024
 
 
-def test_invoice_send_unconfigured_smtp(auth_headers):
+def test_invoice_send_with_configured_smtp(auth_headers):
+    """SMTP is now wired — send should succeed (200) and flip status to 'sent'."""
     r = requests.post(
         f"{API}/admin/invoices/{pytest.inv_id_usd}/send", headers=auth_headers
     )
-    assert r.status_code == 503
-    assert "SMTP_APP_PASSWORD" in r.json().get("detail", "")
+    assert r.status_code == 200, r.text
+    assert r.json().get("status") == "sent"
 
 
 def test_invoice_send_missing_email(auth_headers):
@@ -209,8 +211,9 @@ def test_admin_stats_invoice_counters(auth_headers):
     assert d["invoices_paid"] >= 1
 
 
-# ============ Lead creation regression (SMTP unconfigured must not fail) ============
-def test_create_lead_with_smtp_unconfigured():
+# ============ Lead creation regression (lead create must succeed regardless of SMTP state) ============
+def test_create_lead_succeeds_with_bg_email(auth_headers):
+    """Lead create endpoint must always return 201 — email notification is fire-and-forget."""
     payload = {
         "full_name": "TEST Iter3 Lead",
         "email": "iter3_lead@example.com",
