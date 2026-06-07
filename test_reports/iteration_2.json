@@ -1,0 +1,39 @@
+{
+  "summary": "Iteration 2 end-to-end testing for MIR Consulting (CMS + lead workflow + rate-limits + SEO). All 27 backend pytest cases pass. All critical frontend flows verified via Playwright: SEO (per-page titles, robots.txt 200, sitemap.xml 200), public Insights/CaseStudies fallback (4 placeholder cards each when DB empty), public real content rendering after publish, contact form submission with toast, admin login (wrong + correct), tabs switching, full Posts CRUD with live markdown preview, full Case Studies CRUD with outcomes, lead status drawer + notes + delete with confirm, and rate-limiting on /api/leads and /api/admin/login.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Admin > Case Studies tab", "issues": ["Button label reads 'New case studie' (missing 'study'). Minor copy/grammar bug in /app/frontend/src/pages/Admin.jsx around the New <entity> button when entity name is singularized."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_mir_api_v2.py",
+    "/app/test_reports/pytest/pytest_results_v2.xml"
+  ],
+  "action_items": [
+    "Cosmetic: fix the 'New case studie' button label on the Case Studies admin tab (should be 'New case study')."
+  ],
+  "critical_code_review_comments": [
+    "backend/server.py uses slowapi default key_func=get_remote_address which keys on the immediate peer (the ingress proxy). In a real public deployment all traffic shares one IP, so the 5/minute limit acts globally. Acceptable for MVP but should derive client IP from X-Forwarded-For for production.",
+    "ADMIN_TOKEN is now persisted in backend/.env (good). Consider failing fast if it is missing rather than generating an ephemeral one via secrets.token_urlsafe.",
+    "Public /api/posts and /api/case-studies sort by 'published_at' descending; drafts may have null published_at and are excluded via status filter, which is correct. Index on (status, published_at) recommended for scale.",
+    "PostCreate is reused for PUT (admin_update_post) - good DRY - but allows changing slug freely; ensure intentional. _unique_slug excludes the current id so no collision risk.",
+    "admin_create_post/update_post bypasses Post.created_at/updated_at defaults when constructing via Post(...) which is fine, but update path manually sets updated_at - ensure consistency if Post model evolves.",
+    "Frontend Admin.jsx is large (~1300+ lines). Worth splitting into separate components: LeadsPanel, PostsPanel, CaseStudiesPanel, Editor."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_mir_api_v2.py"
+  ],
+  "success_rate": {"backend": "100% (27/27)", "frontend": "100% (all critical flows)"},
+  "test_credentials": "Admin password 'mir-admin-2025' verified working; static token 'mir-admin-static-token-d7f3a91b5e6c4a8f' present in backend/.env and returned on successful login.",
+  "seed_data_creation": "Backend tests cleaned up after themselves (lead, posts, case-studies prefixed TEST_*). Frontend UI test created one lead + one post + one case study and deleted them at the end. Rate-limit test left 5+ /api/leads rejections in the limiter window. Six pre-existing leads remain (from prior iterations).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Run: REACT_APP_BACKEND_URL=<url> pytest /app/backend/tests/test_mir_api_v2.py -v. Tests for /api/leads & /api/admin/login rate-limit are prefixed test_zz_ so they run last (slowapi limiter is 5/min, in-memory). Frontend testids in Admin: admin-tab-{leads,insights,case-studies}, admin-{post,case-study}-{new,row-<id>,edit-<id>,delete-<id>,table}, admin-editor-{title,slug,category,read-time,client,excerpt,cover,outcomes,content,preview,save-draft,publish,cancel}, admin-lead-{view,delete,status}-<id>, admin-drawer-{status,message,notes,save-notes}, admin-leads-{search,status-filter}. After delete in editor/list a confirm AlertDialog opens; click button with text 'Delete'.",
+  "rca_of_the_issue": "N/A - no bugs blocked the review checklist."
+}
