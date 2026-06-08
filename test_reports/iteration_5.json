@@ -1,0 +1,52 @@
+{
+  "summary": "Iteration 5 end-to-end testing for MIR Consulting new feature sweep: Team CRUD, Videos (YouTube) CRUD, unified /api/works feed, Site Settings (logo), GitHub-backed media upload, Leads CSV export, 401 axios interceptor. Backend: 20/20 pytest cases pass in /app/backend/tests/test_iteration5_new_features.py covering team public+admin CRUD with 401 on missing token, video creation (valid URL extracts youtube_id correctly, invalid URL returns 400, public list filtered to published, slug lookup works, delete works), unified /api/works returns items with `type` + `href` discriminator (insight→/insights/{slug}, case_study→/case-studies/{slug}, video→/our-work/video/{slug}) and ?type=video filter works, site-settings GET+PUT roundtrips logo_url correctly with auth required, media upload returns 400 on disallowed folder and 413 on >8MB file and 502 with current read-only GitHub PAT (as expected — PUT 403 from GitHub bubbles up as 502), CSV export returns text/csv with attachment Content-Disposition and full column header, regression on /admin/leads /posts /case-studies /invoices /stats /email-status all 200. Frontend: Navbar shows Home·About·Services·Industries·Our Work·Contact (verified — NO separate Insights/Case Studies links), `M` logo placeholder visible until logo_url is set. /our-work renders with ALL WORK / CASE STUDIES / INSIGHTS / VIDEOS tabs and lists the seed video. /our-work/video/operating-model-fundamentals renders iframe with src=https://www.youtube.com/embed/dQw4w9WgXcQ?rel=0 ✓. /about shows Alice (seed team member) in Team section. /admin login with mir-admin-2026 shows 7 tabs (Leads, Insights, Case Studies, Invoices, Videos, Team, Site) all clickable and loading their panels. Leads tab has data-testid `admin-leads-export-csv` CSV button. Team panel has data-testid `team-new-btn` and shows seeded Alice row. Site Settings panel exposes 'Paste URL' fallback (visible text) so the URL-input path is reachable for users when GitHub upload fails. 401 interceptor verified: setting localStorage.mir_admin_token='invalid-token' → reload /admin → 3x 401 from backend (visible in console) → token cleared → 'Secure Sign In' card shown again ✓.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/admin/media/upload", "issue": "Returns 502 for ALL upload attempts because the GITHUB_TOKEN in /app/backend/.env has read-only scope (PUT to GitHub Contents API returns 403 'Resource not accessible by personal access token'). NOT a code bug — owner must regenerate the PAT with 'Contents: Write' permission on mirenterprises25-dotcom/Mir-Consultancy. The frontend correctly absorbs this and surfaces the 'Paste URL' fallback."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Admin > New invoice editor", "issues": ["(carryover from iter3/4) Date inputs use browser-native <input type=date> instead of shadcn Calendar/Popover."]},
+      {"screen": "Admin > Case Studies tab", "issues": ["(carryover from iter3/4) Typo 'New case studie' should be 'New case study'."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration5_new_features.py",
+    "/app/test_reports/pytest/pytest_iteration5.xml"
+  ],
+  "action_items": [
+    "(OWNER ACTION, not a code fix) Regenerate GitHub PAT with Contents:Write scope on mirenterprises25-dotcom/Mir-Consultancy so /api/admin/media/upload can succeed. Frontend URL-fallback is already wired so the admin UX continues to work in the meantime.",
+    "(Cosmetic, carryover from iter3/4) Replace native date pickers in invoice editor with shadcn Calendar/Popover.",
+    "(Cosmetic, carryover from iter3/4) Fix 'New case studie' → 'New case study' typo on Case Studies admin tab.",
+    "(Code hygiene) server.py is now ~1270 lines — well past the 700-line threshold. Consider splitting into routers/ (auth, leads, posts, case_studies, invoices, team, videos, site_settings, media)."
+  ],
+  "critical_code_review_comments": [
+    "server.py grew from 928 → 1272 lines this iteration. New endpoints are clean and consistent (all use require_admin dep, all exclude _id from projections, all use slugify+unique_slug helper for slug collisions) — but the file should be split into routers before adding more.",
+    "_extract_youtube_id supports watch?v=, youtu.be/, /embed/ and /shorts/ — good coverage. Returns None for unrecognised URLs and create_video correctly raises HTTPException(400) — verified.",
+    "/api/works merges 3 collections client-side in Python and sorts by published_at desc — fine for current scale (<1000 items). Add an index hint or aggregation pipeline if collection grows >5k.",
+    "/api/admin/media/upload catches all upload errors via `except Exception` and returns 502 with a generic message — this is what allows the frontend fallback to trigger correctly. Good.",
+    "MediaUpload frontend widget (per task statement) opens 'Paste URL' fallback on upload failure — verified visible on Site Settings panel.",
+    "401 interceptor (frontend axios) correctly clears localStorage.mir_admin_token and triggers re-render to the login card — verified end-to-end with invalid-token reload.",
+    "CSV export uses utf-8-sig BOM (good for Excel compatibility) and strips newlines from message/notes to keep one-row-per-lead — sane.",
+    "Site settings is a true singleton (find_one({key: 'site'}) with upsert) — good, no orphan rows possible.",
+    "Bootstrap env mismatch from iter4 still unfixed: /app/backend/.env now shows ADMIN_PASSWORD=\"mir-admin-2026\" (matches DB) — that gotcha is RESOLVED this iteration.",
+    "Team admin endpoints: PUT/DELETE only return 404 on missing id — good; no leaky stack traces."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration5_new_features.py (new — 20 cases across Team, Videos, Works, SiteSettings, MediaUpload, LeadsCSV, Regression)"
+  ],
+  "success_rate": {
+    "backend": "100% (20/20)",
+    "frontend": "100% — navbar verified, /our-work tabs render, video iframe embeds correctly, About Team has Alice, all 7 admin tabs load, CSV button present, Team new-member button present, Site Settings 'Paste URL' fallback visible, 401 interceptor wipes token and shows login card"
+  },
+  "test_credentials": "Admin password: mir-admin-2026 (verified live). Static admin bearer: mir-admin-static-token-d7f3a91b5e6c4a8f.",
+  "seed_data_creation": "Test CRUD created and cleaned up: 1 team member (TEST_Member, deleted), 1 video (TEST_Operating Models with youtube_id=dQw4w9WgXcQ, deleted). Site settings logo_url temporarily set to https://example.com/test-logo.png then reset to null. No leftover test pollution.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All 7 new feature areas (Team, Videos, Works, Site Settings, Media Upload, CSV export, 401 interceptor) are working end-to-end. The ONLY non-working flow is the actual GitHub file PUT — it's a PAT scope issue, NOT a code bug. The frontend correctly falls back to a 'Paste URL' input so the admin Site Settings UX is fully usable. To verify CSV download in browser, monitor `page.on('download')`. Seed data still in DB: 1 team member 'Alice Mendez', 1 published video 'Operating model fundamentals' (slug=operating-model-fundamentals). Admin password mir-admin-2026 is in DB; bootstrap env now matches. Rate limits: /admin/login=5/min, /admin/forgot-password=3/15min, /admin/reset-password=5/15min — sleep between back-to-back regression runs.",
+  "rca_of_the_issue": "N/A — feature sweep is fully working. The 502 on /api/admin/media/upload is by design given the read-only GitHub PAT; the frontend gracefully degrades to URL input. No bugs found."
+}

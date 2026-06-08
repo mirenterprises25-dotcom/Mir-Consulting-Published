@@ -2,6 +2,7 @@ import React from "react";
 import { Link, NavLink } from "react-router-dom";
 import { Menu, X, ArrowUpRight, Globe, Check } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { fetchSiteSettings } from "@/lib/api";
 
 const LANGUAGES = [
     { code: "en", label: "English", short: "EN" },
@@ -14,7 +15,14 @@ export default function Navbar() {
     const [open, setOpen] = React.useState(false);
     const [langOpen, setLangOpen] = React.useState(false);
     const [scrolled, setScrolled] = React.useState(false);
+    const [logoUrl, setLogoUrl] = React.useState(null);
     const langRef = React.useRef(null);
+
+    React.useEffect(() => {
+        fetchSiteSettings()
+            .then((s) => setLogoUrl(s?.logo_url || null))
+            .catch(() => {});
+    }, []);
 
     React.useEffect(() => {
         const onScroll = () => setScrolled(window.scrollY > 8);
@@ -38,8 +46,7 @@ export default function Navbar() {
         { to: "/about", label: t("nav.about"), key: "about" },
         { to: "/services", label: t("nav.services"), key: "services" },
         { to: "/industries", label: t("nav.industries"), key: "industries" },
-        { to: "/insights", label: t("nav.insights"), key: "insights" },
-        { to: "/case-studies", label: t("nav.case_studies"), key: "case-studies" },
+        { to: "/our-work", label: t("nav.our_work"), key: "our-work" },
         { to: "/contact", label: t("nav.contact"), key: "contact" },
     ];
 
@@ -69,10 +76,19 @@ export default function Navbar() {
                     className="flex items-center gap-3 group"
                     onClick={() => setOpen(false)}
                 >
-                    <div className="w-9 h-9 border border-mir-blue/40 flex items-center justify-center bg-mir-blue/8 group-hover:bg-mir-blue/15 transition-colors">
-                        <span className="font-heading font-bold text-mir-blue text-sm tracking-tighter">
-                            M
-                        </span>
+                    <div className="w-9 h-9 border border-mir-blue/40 flex items-center justify-center bg-mir-blue/8 group-hover:bg-mir-blue/15 transition-colors overflow-hidden" data-testid="navbar-logo-box">
+                        {logoUrl ? (
+                            <img
+                                src={logoUrl}
+                                alt="MIR Consulting"
+                                className="w-full h-full object-contain"
+                                onError={() => setLogoUrl(null)}
+                            />
+                        ) : (
+                            <span className="font-heading font-bold text-mir-blue text-sm tracking-tighter">
+                                M
+                            </span>
+                        )}
                     </div>
                     <div className="leading-none">
                         <div className="font-heading text-lg font-semibold text-mir-text tracking-tight">

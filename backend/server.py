@@ -1,5 +1,5 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header, Request, BackgroundTasks
-from fastapi.responses import JSONResponse, Response
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header, Request, BackgroundTasks, UploadFile, File, Form
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -19,6 +19,7 @@ from datetime import datetime, timezone
 from email_service import send_new_lead_notification, send_invoice_email, is_configured as smtp_is_configured
 from invoice_pdf import render_invoice_pdf, fmt_money
 import auth_admin
+import github_storage
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -901,6 +902,347 @@ async def public_invoice_pdf(token: str):
     )
 
 
+# ====================== MEDIA UPLOAD (GitHub-backed) ======================
+ALLOWED_MEDIA_FOLDERS = ("team", "blog", "videos", "logos", "uploads")
+MAX_UPLOAD_BYTES = 8 * 1024 * 1024  # 8 MB
+
+
+@api_router.post("/admin/media/upload")
+async def upload_media(
+    file: UploadFile = File(...),
+    folder: str = Form("uploads"),
+    _: bool = Depends(require_admin),
+):
+    if folder not in ALLOWED_MEDIA_FOLDERS:
+        raise HTTPException(status_code=400, detail=f"Folder must be one of: {', '.join(ALLOWED_MEDIA_FOLDERS)}")
+    if not github_storage.is_configured():
+        raise HTTPException(status_code=503, detail="GitHub storage is not configured. Set GITHUB_TOKEN and GITHUB_REPO.")
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="Empty file")
+    if len(data) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail=f"File too large (max {MAX_UPLOAD_BYTES // (1024*1024)} MB)")
+    try:
+        result = await github_storage.upload_file(folder, file.filename or "file", data, file.content_type)
+    except Exception as e:  # noqa: BLE001
+        logger.exception("Media upload failed: %s", e)
+        raise HTTPException(status_code=502, detail="Upload to GitHub failed")
+    return result
+
+
+@api_router.get("/media/{path:path}")
+async def get_media(path: str):
+    if not path or ".." in path:
+        raise HTTPException(status_code=400, detail="Invalid path")
+    try:
+        data, content_type = await github_storage.fetch_file(path)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Media not found")
+    except Exception as e:  # noqa: BLE001
+        logger.exception("Media fetch failed: %s", e)
+        raise HTTPException(status_code=502, detail="Media fetch failed")
+    return Response(
+        content=data,
+        media_type=content_type,
+        headers={"Cache-Control": "public, max-age=86400, immutable"},
+    )
+
+
+# ====================== TEAM MEMBERS ======================
+class TeamMemberCreate(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    name: str = Field(min_length=2, max_length=160)
+    role: str = Field(min_length=2, max_length=160)
+    bio: str = Field(min_length=4, max_length=1200)
+    photo: Optional[str] = Field(default=None, max_length=600)
+    expertise: List[str] = Field(default_factory=list)
+    linkedin: Optional[str] = Field(default=None, max_length=400)
+    order: int = Field(default=0)
+
+
+class TeamMember(TeamMemberCreate):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    created_at: str = Field(default_factory=utc_now_iso)
+    updated_at: str = Field(default_factory=utc_now_iso)
+
+
+@api_router.get("/team", response_model=List[TeamMember])
+async def list_team_public():
+    rows = await db.team_members.find({}, {"_id": 0}).sort([("order", 1), ("created_at", 1)]).to_list(200)
+    return rows
+
+
+@api_router.get("/admin/team", response_model=List[TeamMember])
+async def list_team_admin(_: bool = Depends(require_admin)):
+    rows = await db.team_members.find({}, {"_id": 0}).sort([("order", 1), ("created_at", 1)]).to_list(500)
+    return rows
+
+
+@api_router.post("/admin/team", response_model=TeamMember, status_code=201)
+async def create_team_member(payload: TeamMemberCreate, _: bool = Depends(require_admin)):
+    member = TeamMember(**payload.model_dump())
+    await db.team_members.insert_one(member.model_dump())
+    return member
+
+
+@api_router.put("/admin/team/{member_id}", response_model=TeamMember)
+async def update_team_member(member_id: str, payload: TeamMemberCreate, _: bool = Depends(require_admin)):
+    updates = {**payload.model_dump(), "updated_at": utc_now_iso()}
+    result = await db.team_members.find_one_and_update(
+        {"id": member_id}, {"$set": updates}, return_document=True, projection={"_id": 0}
+    )
+    if not result:
+        raise HTTPException(status_code=404, detail="Team member not found")
+    return result
+
+
+@api_router.delete("/admin/team/{member_id}")
+async def delete_team_member(member_id: str, _: bool = Depends(require_admin)):
+    res = await db.team_members.delete_one({"id": member_id})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Team member not found")
+    return {"deleted": True}
+
+
+# ====================== VIDEOS (YouTube-backed) ======================
+def _extract_youtube_id(url: str) -> Optional[str]:
+    """Pull the YouTube video id from common URL shapes; return None if unrecognised."""
+    import re as _re
+    if not url:
+        return None
+    patterns = [
+        r"(?:youtube\.com/watch\?v=)([A-Za-z0-9_-]{11})",
+        r"(?:youtu\.be/)([A-Za-z0-9_-]{11})",
+        r"(?:youtube\.com/embed/)([A-Za-z0-9_-]{11})",
+        r"(?:youtube\.com/shorts/)([A-Za-z0-9_-]{11})",
+    ]
+    for pat in patterns:
+        m = _re.search(pat, url)
+        if m:
+            return m.group(1)
+    return None
+
+
+class VideoCreate(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    title: str = Field(min_length=3, max_length=240)
+    description: str = Field(min_length=10, max_length=2000)
+    youtube_url: str = Field(min_length=10, max_length=600)
+    category: Optional[str] = Field(default="Video", max_length=80)
+    cover_image: Optional[str] = Field(default=None, max_length=600)
+    status: Literal["draft", "published"] = "draft"
+    slug: Optional[str] = Field(default=None, max_length=200)
+
+
+class Video(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    slug: str
+    title: str
+    description: str
+    youtube_url: str
+    youtube_id: Optional[str] = None
+    category: Optional[str] = "Video"
+    cover_image: Optional[str] = None
+    status: Literal["draft", "published"] = "draft"
+    created_at: str = Field(default_factory=utc_now_iso)
+    updated_at: str = Field(default_factory=utc_now_iso)
+    published_at: Optional[str] = None
+
+
+@api_router.get("/videos", response_model=List[Video])
+async def list_videos_public():
+    rows = await db.videos.find({"status": "published"}, {"_id": 0}).sort("published_at", -1).to_list(200)
+    return rows
+
+
+@api_router.get("/videos/{slug}", response_model=Video)
+async def get_video_public(slug: str):
+    doc = await db.videos.find_one({"slug": slug, "status": "published"}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Video not found")
+    return doc
+
+
+@api_router.get("/admin/videos", response_model=List[Video])
+async def list_videos_admin(_: bool = Depends(require_admin)):
+    rows = await db.videos.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    return rows
+
+
+@api_router.post("/admin/videos", response_model=Video, status_code=201)
+async def create_video(payload: VideoCreate, _: bool = Depends(require_admin)):
+    base = slugify(payload.slug or payload.title)
+    slug = await _unique_slug(db.videos, base)
+    now = utc_now_iso()
+    yt_id = _extract_youtube_id(payload.youtube_url)
+    if not yt_id:
+        raise HTTPException(status_code=400, detail="Could not extract YouTube video id from the URL")
+    video = Video(
+        slug=slug,
+        title=payload.title,
+        description=payload.description,
+        youtube_url=payload.youtube_url,
+        youtube_id=yt_id,
+        category=payload.category or "Video",
+        cover_image=payload.cover_image,
+        status=payload.status,
+        published_at=now if payload.status == "published" else None,
+    )
+    await db.videos.insert_one(video.model_dump())
+    return video
+
+
+@api_router.put("/admin/videos/{video_id}", response_model=Video)
+async def update_video(video_id: str, payload: VideoCreate, _: bool = Depends(require_admin)):
+    existing = await db.videos.find_one({"id": video_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Video not found")
+    yt_id = _extract_youtube_id(payload.youtube_url)
+    if not yt_id:
+        raise HTTPException(status_code=400, detail="Could not extract YouTube video id from the URL")
+    base = slugify(payload.slug or payload.title)
+    slug = await _unique_slug(db.videos, base, exclude_id=video_id)
+    now = utc_now_iso()
+    publish_now = payload.status == "published" and existing.get("status") != "published"
+    updates = {
+        "slug": slug,
+        "title": payload.title,
+        "description": payload.description,
+        "youtube_url": payload.youtube_url,
+        "youtube_id": yt_id,
+        "category": payload.category or "Video",
+        "cover_image": payload.cover_image,
+        "status": payload.status,
+        "updated_at": now,
+    }
+    if publish_now:
+        updates["published_at"] = now
+    await db.videos.update_one({"id": video_id}, {"$set": updates})
+    doc = await db.videos.find_one({"id": video_id}, {"_id": 0})
+    return doc
+
+
+@api_router.delete("/admin/videos/{video_id}")
+async def delete_video(video_id: str, _: bool = Depends(require_admin)):
+    res = await db.videos.delete_one({"id": video_id})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Video not found")
+    return {"deleted": True}
+
+
+# ====================== UNIFIED "WORKS" FEED ======================
+@api_router.get("/works")
+async def list_works(type: Optional[str] = None):
+    """Public unified feed of published content (insights + case studies + videos)."""
+    items: list[dict] = []
+
+    if not type or type == "insight":
+        for p in await db.posts.find({"status": "published"}, {"_id": 0}).sort("published_at", -1).to_list(200):
+            items.append({
+                "type": "insight",
+                "id": p.get("id"),
+                "slug": p.get("slug"),
+                "title": p.get("title"),
+                "excerpt": p.get("excerpt"),
+                "category": p.get("category"),
+                "cover_image": p.get("cover_image"),
+                "read_time": p.get("read_time"),
+                "published_at": p.get("published_at"),
+                "href": f"/insights/{p.get('slug')}",
+            })
+
+    if not type or type == "case_study":
+        for c in await db.case_studies.find({"status": "published"}, {"_id": 0}).sort("published_at", -1).to_list(200):
+            items.append({
+                "type": "case_study",
+                "id": c.get("id"),
+                "slug": c.get("slug"),
+                "title": c.get("title"),
+                "excerpt": c.get("summary"),
+                "category": c.get("sector"),
+                "cover_image": c.get("cover_image"),
+                "client_name": c.get("client_name"),
+                "published_at": c.get("published_at"),
+                "href": f"/case-studies/{c.get('slug')}",
+            })
+
+    if not type or type == "video":
+        for v in await db.videos.find({"status": "published"}, {"_id": 0}).sort("published_at", -1).to_list(200):
+            items.append({
+                "type": "video",
+                "id": v.get("id"),
+                "slug": v.get("slug"),
+                "title": v.get("title"),
+                "excerpt": v.get("description")[:300] if v.get("description") else "",
+                "category": v.get("category") or "Video",
+                "cover_image": v.get("cover_image") or (f"https://img.youtube.com/vi/{v.get('youtube_id')}/maxresdefault.jpg" if v.get("youtube_id") else None),
+                "youtube_id": v.get("youtube_id"),
+                "youtube_url": v.get("youtube_url"),
+                "published_at": v.get("published_at"),
+                "href": f"/our-work/video/{v.get('slug')}",
+            })
+
+    # newest first across all types; treat None as oldest
+    items.sort(key=lambda x: x.get("published_at") or "", reverse=True)
+    return items
+
+
+# ====================== SITE SETTINGS (singleton) ======================
+SITE_SETTINGS_KEY = "site"
+
+
+class SiteSettings(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    logo_url: Optional[str] = Field(default=None, max_length=600)
+
+
+@api_router.get("/site-settings", response_model=SiteSettings)
+async def get_site_settings_public():
+    doc = await db.site_settings.find_one({"key": SITE_SETTINGS_KEY}, {"_id": 0, "key": 0}) or {}
+    return SiteSettings(**doc)
+
+
+@api_router.put("/admin/site-settings", response_model=SiteSettings)
+async def update_site_settings(payload: SiteSettings, _: bool = Depends(require_admin)):
+    data = payload.model_dump()
+    await db.site_settings.update_one(
+        {"key": SITE_SETTINGS_KEY},
+        {"$set": {**data, "updated_at": utc_now_iso()}, "$setOnInsert": {"key": SITE_SETTINGS_KEY, "created_at": utc_now_iso()}},
+        upsert=True,
+    )
+    return SiteSettings(**data)
+
+
+# ====================== LEADS CSV EXPORT ======================
+@api_router.get("/admin/leads-export.csv")
+async def export_leads_csv(_: bool = Depends(require_admin)):
+    import csv
+    import io
+    rows = await db.leads.find({}, {"_id": 0}).sort("created_at", -1).to_list(5000)
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow([
+        "id", "created_at", "full_name", "email", "company", "phone",
+        "industry", "service_interest", "status", "message", "notes",
+    ])
+    for r in rows:
+        writer.writerow([
+            r.get("id", ""), r.get("created_at", ""), r.get("full_name", ""),
+            r.get("email", ""), r.get("company", "") or "", r.get("phone", "") or "",
+            r.get("industry", "") or "", r.get("service_interest", "") or "",
+            r.get("status", ""), (r.get("message") or "").replace("\n", " ").strip(),
+            (r.get("notes") or "").replace("\n", " ").strip(),
+        ])
+    csv_bytes = buf.getvalue().encode("utf-8-sig")
+    filename = f"mir-leads-{datetime.now(timezone.utc).strftime('%Y-%m-%d')}.csv"
+    return Response(
+        content=csv_bytes,
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 app.include_router(api_router)
 
 app.add_middleware(
@@ -917,6 +1259,8 @@ async def on_startup():
     try:
         await auth_admin.ensure_admin_seeded(db)
         await auth_admin.ensure_reset_indexes(db)
+        await db.team_members.create_index([("order", 1), ("created_at", 1)])
+        await db.videos.create_index("slug", unique=True)
         logger.info("Admin auth bootstrapped (admin seeded, indexes ensured).")
     except Exception as e:  # noqa: BLE001
         logger.exception("Auth bootstrap failed: %s", e)

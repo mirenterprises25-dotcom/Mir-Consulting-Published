@@ -13,6 +13,8 @@ import CaseStudies from "@/pages/CaseStudies";
 import CaseStudyDetail from "@/pages/CaseStudyDetail";
 import Insights from "@/pages/Insights";
 import InsightDetail from "@/pages/InsightDetail";
+import OurWork from "@/pages/OurWork";
+import VideoDetail from "@/pages/VideoDetail";
 import Contact from "@/pages/Contact";
 import Admin from "@/pages/Admin";
 import AdminResetPassword from "@/pages/AdminResetPassword";
@@ -39,6 +41,8 @@ function App() {
                                 path="/insights/:slug"
                                 element={<InsightDetail />}
                             />
+                            <Route path="/our-work" element={<OurWork />} />
+                            <Route path="/our-work/video/:slug" element={<VideoDetail />} />
                             <Route path="/contact" element={<Contact />} />
                             <Route path="*" element={<NotFound />} />
                         </Route>

@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { Section, SectionHeader, StatBlock } from "@/components/sections/Section";
 import CTASection from "@/components/sections/CTASection";
 import { Compass, Target, Eye, HeartHandshake } from "lucide-react";
+import TeamSection from "@/components/sections/TeamSection";
 
 const PILLARS = [
     {
@@ -136,6 +137,8 @@ export default function About() {
                     })}
                 </div>
             </Section>
+
+            <TeamSection />
 
             <CTASection
                 title="Want to talk operating models, dashboards or transformation?"

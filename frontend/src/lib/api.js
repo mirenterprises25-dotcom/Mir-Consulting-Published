@@ -8,6 +8,33 @@ export const api = axios.create({
     headers: { "Content-Type": "application/json" },
 });
 
+// ====== Global 401 interceptor (admin only) ======
+const TOKEN_KEY = "mir_admin_token";
+api.interceptors.response.use(
+    (response) => response,
+    (error) => {
+        const status = error?.response?.status;
+        const config = error?.config || {};
+        const url = (config.url || "").toString();
+        // Only auto-logout if the failing request was a /admin/* call.
+        const isAdminRoute = url.includes("/admin/") && !url.includes("/admin/login");
+        if (status === 401 && isAdminRoute && typeof window !== "undefined") {
+            try {
+                localStorage.removeItem(TOKEN_KEY);
+            } catch (_e) {
+                /* noop */
+            }
+            if (!window.location.pathname.startsWith("/admin")) {
+                window.location.assign("/admin");
+            } else {
+                // already on /admin — soft-reload so the login screen renders again
+                window.location.reload();
+            }
+        }
+        return Promise.reject(error);
+    }
+);
+
 const authHeader = (token) => ({ Authorization: `Bearer ${token}` });
 
 // ====== PUBLIC ======
@@ -153,3 +180,52 @@ export const publicInvoiceUrl = (token) =>
 
 export const fetchEmailStatus = (token) =>
     api.get("/admin/email-status", { headers: authHeader(token) }).then((r) => r.data);
+
+// ====== PUBLIC: TEAM / VIDEOS / WORKS / SITE SETTINGS ======
+export const fetchTeam = () => api.get("/team").then((r) => r.data);
+export const fetchVideos = () => api.get("/videos").then((r) => r.data);
+export const fetchVideo = (slug) => api.get(`/videos/${slug}`).then((r) => r.data);
+export const fetchWorks = (type) =>
+    api.get("/works", { params: type ? { type } : {} }).then((r) => r.data);
+export const fetchSiteSettings = () => api.get("/site-settings").then((r) => r.data);
+
+// ====== ADMIN: TEAM ======
+export const fetchAdminTeam = (token) =>
+    api.get("/admin/team", { headers: authHeader(token) }).then((r) => r.data);
+export const createTeamMember = (token, payload) =>
+    api.post("/admin/team", payload, { headers: authHeader(token) }).then((r) => r.data);
+export const updateTeamMember = (token, id, payload) =>
+    api.put(`/admin/team/${id}`, payload, { headers: authHeader(token) }).then((r) => r.data);
+export const deleteTeamMember = (token, id) =>
+    api.delete(`/admin/team/${id}`, { headers: authHeader(token) }).then((r) => r.data);
+
+// ====== ADMIN: VIDEOS ======
+export const fetchAdminVideos = (token) =>
+    api.get("/admin/videos", { headers: authHeader(token) }).then((r) => r.data);
+export const createVideo = (token, payload) =>
+    api.post("/admin/videos", payload, { headers: authHeader(token) }).then((r) => r.data);
+export const updateVideo = (token, id, payload) =>
+    api.put(`/admin/videos/${id}`, payload, { headers: authHeader(token) }).then((r) => r.data);
+export const deleteVideo = (token, id) =>
+    api.delete(`/admin/videos/${id}`, { headers: authHeader(token) }).then((r) => r.data);
+
+// ====== ADMIN: SITE SETTINGS ======
+export const updateSiteSettings = (token, payload) =>
+    api.put("/admin/site-settings", payload, { headers: authHeader(token) }).then((r) => r.data);
+
+// ====== ADMIN: LEADS CSV EXPORT ======
+export const downloadLeadsCsv = async (token) => {
+    const res = await api.get("/admin/leads-export.csv", {
+        headers: authHeader(token),
+        responseType: "blob",
+    });
+    const blob = new Blob([res.data], { type: "text/csv" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `mir-leads-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+};

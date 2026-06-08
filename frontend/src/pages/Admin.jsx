@@ -21,6 +21,10 @@ import {
     Save,
     Receipt,
     KeyRound,
+    Download,
+    UserCircle2,
+    PlayCircle,
+    Settings,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -75,8 +79,12 @@ import {
     deleteCaseStudy,
     forgotPassword,
     changePassword,
+    downloadLeadsCsv,
 } from "@/lib/api";
 import InvoicesPanel from "@/pages/admin/InvoicesPanel";
+import TeamPanel from "@/pages/admin/TeamPanel";
+import VideosPanel from "@/pages/admin/VideosPanel";
+import SiteSettingsPanel from "@/pages/admin/SiteSettingsPanel";
 import {
     Dialog,
     DialogContent,
@@ -441,6 +449,30 @@ function Dashboard({ token, onLogout, onAuthExpired }) {
                             <Receipt className="w-4 h-4 mr-2" />
                             Invoices
                         </TabsTrigger>
+                        <TabsTrigger
+                            value="videos"
+                            data-testid="admin-tab-videos"
+                            className="rounded-none data-[state=active]:bg-mir-midnight data-[state=active]:text-white text-mir-text px-5 py-2.5 text-sm"
+                        >
+                            <PlayCircle className="w-4 h-4 mr-2" />
+                            Videos
+                        </TabsTrigger>
+                        <TabsTrigger
+                            value="team"
+                            data-testid="admin-tab-team"
+                            className="rounded-none data-[state=active]:bg-mir-midnight data-[state=active]:text-white text-mir-text px-5 py-2.5 text-sm"
+                        >
+                            <UserCircle2 className="w-4 h-4 mr-2" />
+                            Team
+                        </TabsTrigger>
+                        <TabsTrigger
+                            value="site-settings"
+                            data-testid="admin-tab-site-settings"
+                            className="rounded-none data-[state=active]:bg-mir-midnight data-[state=active]:text-white text-mir-text px-5 py-2.5 text-sm"
+                        >
+                            <Settings className="w-4 h-4 mr-2" />
+                            Site
+                        </TabsTrigger>
                     </TabsList>
 
                     <TabsContent value="leads" className="mt-6">
@@ -472,6 +504,15 @@ function Dashboard({ token, onLogout, onAuthExpired }) {
                             onChange={loadStats}
                             prefillLead={invoicePrefill}
                         />
+                    </TabsContent>
+                    <TabsContent value="videos" className="mt-6">
+                        <VideosPanel token={token} onAuthExpired={onAuthExpired} onChange={loadStats} />
+                    </TabsContent>
+                    <TabsContent value="team" className="mt-6">
+                        <TeamPanel token={token} onAuthExpired={onAuthExpired} onChange={loadStats} />
+                    </TabsContent>
+                    <TabsContent value="site-settings" className="mt-6">
+                        <SiteSettingsPanel token={token} onAuthExpired={onAuthExpired} />
                     </TabsContent>
                 </Tabs>
             </main>
@@ -649,6 +690,21 @@ function LeadsPanel({ token, onAuthExpired, onChange, onCreateInvoice }) {
                         className={btnGhost}
                     >
                         Refresh
+                    </button>
+                    <button
+                        onClick={async () => {
+                            try {
+                                await downloadLeadsCsv(token);
+                                toast.success("CSV downloaded.");
+                            } catch (e) {
+                                if (e?.response?.status === 401) onAuthExpired?.();
+                                else toast.error("Export failed.");
+                            }
+                        }}
+                        data-testid="admin-leads-export-csv"
+                        className={btnGhost}
+                    >
+                        <Download className="w-3.5 h-3.5 mr-1.5 inline" /> CSV
                     </button>
                 </div>
             </div>
