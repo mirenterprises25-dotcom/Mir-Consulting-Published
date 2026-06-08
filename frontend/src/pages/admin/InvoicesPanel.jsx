@@ -17,6 +17,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { DatePicker } from "@/components/ui/date-picker";
 import {
     Select,
     SelectContent,
@@ -608,21 +609,17 @@ function InvoiceEditor({ initial, onCancel, onSave }) {
 
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                         <Field label="Issue date">
-                            <Input
-                                data-testid="admin-invoice-issue-date"
-                                type="date"
+                            <DatePicker
+                                testId="admin-invoice-issue-date"
                                 value={form.issue_date}
-                                onChange={(e) => set("issue_date", e.target.value)}
-                                className={`${inputCls} h-11`}
+                                onChange={(v) => set("issue_date", v)}
                             />
                         </Field>
                         <Field label="Due date">
-                            <Input
-                                data-testid="admin-invoice-due-date"
-                                type="date"
+                            <DatePicker
+                                testId="admin-invoice-due-date"
                                 value={form.due_date}
-                                onChange={(e) => set("due_date", e.target.value)}
-                                className={`${inputCls} h-11`}
+                                onChange={(v) => set("due_date", v)}
                             />
                         </Field>
                         <Field label="Tax rate (%)">

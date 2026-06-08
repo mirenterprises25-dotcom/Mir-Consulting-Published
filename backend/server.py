@@ -20,6 +20,8 @@ from email_service import send_new_lead_notification, send_invoice_email, is_con
 from invoice_pdf import render_invoice_pdf, fmt_money
 import auth_admin
 import github_storage
+import stripe_service
+from translate_service import translate_text
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -719,7 +721,8 @@ def _public_url_for(token: str) -> Optional[str]:
     base = os.environ.get("PUBLIC_BASE_URL", "").rstrip("/")
     if not base:
         return None
-    return f"{base}/api/invoices/public/{token}/pdf"
+    # New payable invoice page (includes Stripe "Pay online" + PDF download)
+    return f"{base}/invoice/{token}"
 
 
 @api_router.get("/admin/email-status")
@@ -900,6 +903,138 @@ async def public_invoice_pdf(token: str):
         media_type="application/pdf",
         headers={"Content-Disposition": f'inline; filename="{doc["number"]}.pdf"'},
     )
+
+
+# ====================== STRIPE CHECKOUT (public, per-invoice) ======================
+class CheckoutSessionPayload(BaseModel):
+    origin_url: str  # e.g. https://mirconsulting.com  (used to build success/cancel URLs)
+
+
+@api_router.post("/invoices/public/{token}/checkout")
+async def create_invoice_checkout(token: str, payload: CheckoutSessionPayload):
+    doc = await db.invoices.find_one({"public_token": token}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    if doc.get("status") == "paid":
+        raise HTTPException(status_code=400, detail="Invoice is already paid")
+    if doc.get("status") == "void":
+        raise HTTPException(status_code=400, detail="Invoice is void")
+    amount = float(doc.get("total", 0))
+    if amount <= 0:
+        raise HTTPException(status_code=400, detail="Invoice total is zero — nothing to charge")
+    origin = payload.origin_url.rstrip("/")
+    success_url = f"{origin}/invoice/{token}?payment=success&session_id={{CHECKOUT_SESSION_ID}}"
+    cancel_url = f"{origin}/invoice/{token}?payment=cancelled"
+    try:
+        session = await stripe_service.create_invoice_session(
+            invoice_number=doc["number"],
+            amount=amount,
+            currency=doc.get("currency", "USD"),
+            success_url=success_url,
+            cancel_url=cancel_url,
+            metadata={"public_token": token, "invoice_id": doc["id"]},
+        )
+    except Exception as e:
+        logger.exception("Stripe checkout creation failed: %s", e)
+        raise HTTPException(status_code=502, detail=f"Stripe error: {e}")
+
+    # Persist the payment_transaction row.
+    await db.payment_transactions.insert_one({
+        "id": str(uuid.uuid4()),
+        "session_id": session.session_id,
+        "invoice_id": doc["id"],
+        "invoice_number": doc["number"],
+        "public_token": token,
+        "amount": amount,
+        "currency": doc.get("currency", "USD"),
+        "payment_status": "initiated",
+        "status": "open",
+        "created_at": utc_now_iso(),
+        "updated_at": utc_now_iso(),
+    })
+    return {"url": session.url, "session_id": session.session_id}
+
+
+@api_router.get("/invoices/public/{token}/checkout/{session_id}")
+async def invoice_checkout_status(token: str, session_id: str):
+    """Poll the status of a Stripe Checkout session and flip invoice → paid on success."""
+    doc = await db.invoices.find_one({"public_token": token}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    try:
+        status = await stripe_service.get_session_status(session_id)
+    except Exception as e:
+        logger.exception("Stripe status check failed: %s", e)
+        raise HTTPException(status_code=502, detail=f"Stripe error: {e}")
+
+    update = {
+        "status": status.status,
+        "payment_status": status.payment_status,
+        "updated_at": utc_now_iso(),
+    }
+    # idempotent: only update once, never re-process a completed payment
+    txn = await db.payment_transactions.find_one({"session_id": session_id})
+    if txn and txn.get("payment_status") != "paid" and status.payment_status == "paid":
+        await db.invoices.update_one(
+            {"public_token": token, "status": {"$ne": "paid"}},
+            {"$set": {"status": "paid", "paid_at": utc_now_iso(), "updated_at": utc_now_iso()}},
+        )
+    await db.payment_transactions.update_one(
+        {"session_id": session_id}, {"$set": update}
+    )
+    return {
+        "session_id": session_id,
+        "status": status.status,
+        "payment_status": status.payment_status,
+        "amount_total": status.amount_total,
+        "currency": status.currency,
+    }
+
+
+@app.post("/api/webhook/stripe")
+async def stripe_webhook(request: Request):
+    body = await request.body()
+    sig = request.headers.get("Stripe-Signature", "")
+    try:
+        client = stripe_service._client()
+        evt = await client.handle_webhook(body, sig)
+    except Exception as e:
+        logger.warning("Stripe webhook validation failed: %s", e)
+        raise HTTPException(status_code=400, detail="Invalid signature")
+    if evt.event_type in ("checkout.session.completed", "payment_intent.succeeded") and evt.payment_status == "paid":
+        sid = evt.session_id
+        txn = await db.payment_transactions.find_one({"session_id": sid})
+        if txn and txn.get("payment_status") != "paid":
+            await db.invoices.update_one(
+                {"id": txn["invoice_id"], "status": {"$ne": "paid"}},
+                {"$set": {"status": "paid", "paid_at": utc_now_iso(), "updated_at": utc_now_iso()}},
+            )
+            await db.payment_transactions.update_one(
+                {"session_id": sid},
+                {"$set": {"payment_status": "paid", "status": "complete", "updated_at": utc_now_iso()}},
+            )
+    return {"received": True}
+
+
+# ====================== ADMIN TRANSLATION (LLM) ======================
+class TranslatePayload(BaseModel):
+    text: str
+    target_lang: Literal["en", "de", "es"]
+    source_lang: Optional[Literal["en", "de", "es", "auto"]] = "auto"
+
+
+@api_router.post("/admin/translate")
+async def admin_translate(payload: TranslatePayload, _: bool = Depends(require_admin)):
+    if not payload.text or not payload.text.strip():
+        return {"translated": ""}
+    try:
+        out = await translate_text(
+            payload.text, payload.target_lang, payload.source_lang or "auto"
+        )
+    except Exception as e:
+        logger.exception("Translation failed: %s", e)
+        raise HTTPException(status_code=502, detail=f"Translation failed: {e}")
+    return {"translated": out, "target_lang": payload.target_lang}
 
 
 # ====================== MEDIA UPLOAD (GitHub-backed) ======================

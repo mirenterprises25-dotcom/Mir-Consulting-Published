@@ -29,6 +29,7 @@ const TYPE_LABEL = {
 export default function OurWork() {
     const [items, setItems] = React.useState(null);
     const [tab, setTab] = React.useState("all");
+    const [category, setCategory] = React.useState("all");
 
     React.useEffect(() => {
         fetchWorks()
@@ -36,7 +37,19 @@ export default function OurWork() {
             .catch(() => setItems([]));
     }, []);
 
-    const filtered = (items || []).filter((it) => tab === "all" || it.type === tab);
+    const visibleByTab = (items || []).filter((it) => tab === "all" || it.type === tab);
+    const categories = React.useMemo(() => {
+        const set = new Set();
+        visibleByTab.forEach((it) => {
+            if (it.category) set.add(it.category);
+        });
+        return Array.from(set).sort();
+    }, [visibleByTab]);
+    // Reset category when it disappears for the current tab
+    React.useEffect(() => {
+        if (category !== "all" && !categories.includes(category)) setCategory("all");
+    }, [categories, category]);
+    const filtered = visibleByTab.filter((it) => category === "all" || it.category === category);
 
     return (
         <div data-testid="our-work-page" className="bg-mir-bg">
@@ -64,7 +77,7 @@ export default function OurWork() {
             </Section>
 
             <Section testId="our-work-list" className="border-t border-mir-border bg-mir-surface">
-                <div className="mb-10 flex flex-wrap gap-2" data-testid="our-work-tabs">
+                <div className="mb-6 flex flex-wrap gap-2" data-testid="our-work-tabs">
                     {TABS.map((t) => (
                         <button
                             key={t.key}
@@ -80,6 +93,42 @@ export default function OurWork() {
                         </button>
                     ))}
                 </div>
+
+                {categories.length > 0 && (
+                    <div
+                        className="mb-10 flex flex-wrap items-center gap-2"
+                        data-testid="our-work-categories"
+                    >
+                        <span className="text-[10px] uppercase tracking-[0.25em] text-mir-muted mr-2">
+                            Topic
+                        </span>
+                        <button
+                            onClick={() => setCategory("all")}
+                            data-testid="our-work-category-all"
+                            className={`px-3 py-1.5 text-[11px] uppercase tracking-[0.2em] border transition-colors ${
+                                category === "all"
+                                    ? "border-mir-text text-mir-text bg-white"
+                                    : "border-mir-border text-mir-textSoft hover:border-mir-text hover:text-mir-text"
+                            }`}
+                        >
+                            All
+                        </button>
+                        {categories.map((c) => (
+                            <button
+                                key={c}
+                                onClick={() => setCategory(c)}
+                                data-testid={`our-work-category-${c.replace(/\s+/g, "-").toLowerCase()}`}
+                                className={`px-3 py-1.5 text-[11px] uppercase tracking-[0.2em] border transition-colors ${
+                                    category === c
+                                        ? "border-mir-text text-mir-text bg-white"
+                                        : "border-mir-border text-mir-textSoft hover:border-mir-text hover:text-mir-text"
+                                }`}
+                            >
+                                {c}
+                            </button>
+                        ))}
+                    </div>
+                )}
 
                 {items === null ? (
                     <div className="py-20 text-center text-mir-muted text-sm" data-testid="our-work-loading">
