@@ -97,12 +97,13 @@ Rebuild the entire MIR Consulting website from scratch — a premium, scalable, 
 - 2026-02 (b) — Invoice module (multi-currency, ReportLab PDF, download + public token view + email send), Gmail SMTP integration for new-lead notifications, multi-language site (EN/DE/ES) with globe switcher, stats now include invoice counters.
 - 2026-02 (c) — Admin DB auth migration (bcrypt) with "Forgot password" magic-link reset email via Gmail SMTP and `/admin/reset/:token` page.
 - 2026-06 — Team Members section on About + admin CRUD; Videos (YouTube embed) module + admin CRUD; unified `/our-work` page merging Insights + Case Studies + Videos with category tabs; Site Settings panel + custom logo upload replacing navbar "M"; GitHub-backed media upload (private repo, proxied through `/api/media/{path}` with caching); Lead CSV export; global axios 401 interceptor.
+- 2026-06 (b) — **GitHub media upload now LIVE end-to-end** (new PAT with Contents:Write on public repo `mirenterprises25-dotcom/Mir-Consulting-Published`). Site-wide SEO wired via `react-helmet-async`: `Seo` component now applied on Home (with Organization JSON-LD), About, Services, Industries, Contact, OurWork, InsightDetail, CaseStudyDetail, VideoDetail; admin pages (`/admin`, `/admin/reset/*`) and `NotFound` use `noIndex`. Static description/og meta tags removed from `index.html` to avoid duplicates. Canonical/hreflang point at production domain via `REACT_APP_SITE_URL`. Verified iteration_6 — 100% pass.
 
 ## Backlog
-- **P0 (owner action)** — Regenerate GitHub PAT with **Contents: Write** permission on `mirenterprises25-dotcom/Mir-Consultancy` so `/api/admin/media/upload` succeeds (currently returns 502 because the PAT is read-only). UI falls back to "Paste URL" today, so the platform is fully usable in the meantime.
-- **P1** — Set production `PUBLIC_BASE_URL` once a domain is decided so invoice emails include a live online-view link; regenerate `sitemap.xml` / `robots.txt` and canonical SEO tags.
+- **P1** — Deploy + custom domain: update `PUBLIC_BASE_URL` so invoice emails include the live online-view link; regenerate `sitemap.xml` / `robots.txt` for production URLs.
 - **P2** — LLM-powered auto-translate for CMS articles (Insights / Case Studies / Videos) using Emergent Universal Key.
-- **P2** — Refactor: split `server.py` (~1270 lines) into `routers/` modules and `Admin.jsx` (~1740 lines) into separate panel files.
+- **P2** — Refactor: split `server.py` (~1270 lines) into `routers/` modules and `Admin.jsx` (~1760 lines) into separate panel files.
 - **P3** — Invoice payment integrations (Stripe Checkout link on public invoice page; test key already in pod env).
 - **P3** — Tag/category filtering on public Insights index.
 - **P3** — Replace native date inputs in invoice editor with shadcn Calendar/Popover.
+- **P3** — Fix "New case studie" typo in admin Case Studies tab.
