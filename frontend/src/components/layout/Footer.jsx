@@ -1,8 +1,17 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { Mail, MapPin, Linkedin, ArrowUpRight } from "lucide-react";
+import { fetchSiteSettings } from "@/lib/api";
 
 export default function Footer() {
+    const [logoUrl, setLogoUrl] = React.useState(null);
+
+    React.useEffect(() => {
+        fetchSiteSettings()
+            .then((s) => setLogoUrl(s?.logo_url || null))
+            .catch(() => {});
+    }, []);
+
     return (
         <footer
             data-testid="site-footer"
@@ -15,11 +24,24 @@ export default function Footer() {
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-12">
                     <div className="md:col-span-5">
                         <div className="flex items-center gap-3 mb-6">
-                            <div className="w-10 h-10 border border-mir-blue/60 flex items-center justify-center bg-mir-blue/15">
-                                <span className="font-heading font-bold text-mir-blueSoft tracking-tighter">
-                                    M
-                                </span>
-                            </div>
+                            {logoUrl ? (
+                                <img
+                                    src={logoUrl}
+                                    alt="MIR Consulting"
+                                    data-testid="footer-logo-img"
+                                    className="h-10 w-auto max-w-[160px] object-contain"
+                                    onError={() => setLogoUrl(null)}
+                                />
+                            ) : (
+                                <div
+                                    data-testid="footer-logo-placeholder"
+                                    className="w-10 h-10 border border-mir-blue/60 flex items-center justify-center bg-mir-blue/15"
+                                >
+                                    <span className="font-heading font-bold text-mir-blueSoft tracking-tighter">
+                                        M
+                                    </span>
+                                </div>
+                            )}
                             <div>
                                 <div className="font-heading text-xl font-semibold tracking-tight text-white">
                                     MIR{" "}

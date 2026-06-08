@@ -76,20 +76,24 @@ export default function Navbar() {
                     className="flex items-center gap-3 group"
                     onClick={() => setOpen(false)}
                 >
-                    <div className="w-9 h-9 border border-mir-blue/40 flex items-center justify-center bg-mir-blue/8 group-hover:bg-mir-blue/15 transition-colors overflow-hidden" data-testid="navbar-logo-box">
-                        {logoUrl ? (
-                            <img
-                                src={logoUrl}
-                                alt="MIR Consulting"
-                                className="w-full h-full object-contain"
-                                onError={() => setLogoUrl(null)}
-                            />
-                        ) : (
+                    {logoUrl ? (
+                        <img
+                            src={logoUrl}
+                            alt="MIR Consulting"
+                            data-testid="navbar-logo-img"
+                            className="h-9 w-auto max-w-[140px] object-contain"
+                            onError={() => setLogoUrl(null)}
+                        />
+                    ) : (
+                        <div
+                            data-testid="navbar-logo-placeholder"
+                            className="w-9 h-9 border border-mir-blue/40 flex items-center justify-center bg-mir-blue/8 group-hover:bg-mir-blue/15 transition-colors overflow-hidden"
+                        >
                             <span className="font-heading font-bold text-mir-blue text-sm tracking-tighter">
                                 M
                             </span>
-                        )}
-                    </div>
+                        </div>
+                    )}
                     <div className="leading-none">
                         <div className="font-heading text-lg font-semibold text-mir-text tracking-tight">
                             MIR <span className="text-mir-muted font-light">Consulting</span>
