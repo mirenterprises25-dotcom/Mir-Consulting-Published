@@ -48,3 +48,16 @@ All secrets live in **two files**:
 - **GitHub PAT**: <https://github.com/settings/personal-access-tokens/new>. Choose **Fine-grained** → only the media repo → permissions: `Contents: Read & Write`, `Metadata: Read`.
 - **Stripe key**: pre-seeded in the Emergent pod as `sk_test_emergent`. For production replace with your own restricted key.
 - **Emergent LLM key**: provided by Emergent in the universal key dashboard.
+
+## ⚠️ Special install step: `emergentintegrations`
+
+`emergentintegrations` is **commented out** in `requirements.txt` because it lives
+on an Emergent-only package index, not on public PyPI. On a fresh deploy run BOTH:
+
+```bash
+pip install -r requirements.txt
+pip install emergentintegrations --extra-index-url https://d33sy5i8bnduwe.cloudfront.net/simple/
+```
+
+If you forget the second command, Stripe Checkout and AI translation will fail
+to import on boot (the backend will not start).
