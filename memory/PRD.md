@@ -23,15 +23,23 @@ Rebuild the entire MIR Consulting website from scratch — a premium, scalable, 
 - `leads` — full_name, email, company, phone, industry, service_interest, message, status (new|contacted|qualified|won|lost), notes, created_at, updated_at.
 - `posts` — slug, title, excerpt, content, category, cover_image, read_time, status, timestamps, published_at.
 - `case_studies` — slug, title, sector, summary, content, client_name, outcomes[], cover_image, status, timestamps, published_at.
+- `videos` — slug, title, description, youtube_url, youtube_id, category, cover_image, status, timestamps, published_at.
+- `team_members` — name, role, bio, photo, expertise[], linkedin, order, timestamps.
+- `site_settings` (singleton, key=`site`) — logo_url, updated_at.
+- `admin_settings` — admin password hash (bcrypt).
+- `password_reset_tokens` — token_hash, expires_at (TTL index, single-use).
 - `invoices` — number (auto INV-YYYY-####), public_token, client_*, currency, issue_date, due_date, line_items[], subtotal, tax_rate, tax_amount, total, notes, status (draft|sent|paid|overdue|void), sent_at, paid_at, lead_id, timestamps.
 
 ## Pages
-- Public: `/` `/about` `/services` `/industries` `/insights` `/insights/:slug` `/case-studies` `/case-studies/:slug` `/contact` `*`.
-- Admin (`/admin`) — tabs:
-  - **Leads** — search, status filter, status dropdown per row, drawer (message, status, notes, "Create invoice for this lead"), delete confirm.
+- Public: `/` `/about` (now includes Team carousel) `/services` `/industries` `/our-work` (unified feed with tabs: All / Case Studies / Insights / Videos) `/our-work/video/:slug` (YouTube embed) `/insights` `/insights/:slug` `/case-studies` `/case-studies/:slug` `/contact` `*`.
+- Admin (`/admin`) — login + "Forgot password" magic-link reset (`/admin/reset/:token`); tabs:
+  - **Leads** — search, status filter, status dropdown per row, drawer (message, status, notes, "Create invoice for this lead"), delete confirm, **CSV export**.
   - **Insights** — list + markdown editor with live preview, draft/publish, delete.
   - **Case Studies** — same + sector, summary, client, outcomes lines.
   - **Invoices** — list + filter + multi-currency editor with live computed totals; download PDF, copy public link, email to client, edit, delete.
+  - **Videos** — YouTube URL CRUD with live iframe preview, draft/publish.
+  - **Team** — team-member CRUD (name, role, bio, photo, expertise tags, LinkedIn, display order).
+  - **Site** — upload custom logo (replaces "M" placeholder in navbar).
 
 ## API
 - `GET /api/health`, `GET /api/company`
@@ -40,6 +48,13 @@ Rebuild the entire MIR Consulting website from scratch — a premium, scalable, 
 - Leads: `GET /api/admin/leads?status=&q=`, `GET/PATCH/DELETE /api/admin/leads/{id}`
 - Posts: public `GET /api/posts`, `/api/posts/{slug}`; admin full CRUD on `/api/admin/posts`
 - Case studies: public `GET /api/case-studies`, `/api/case-studies/{slug}`; admin full CRUD on `/api/admin/case-studies`
+- Videos: public `GET /api/videos`, `/api/videos/{slug}`; admin full CRUD on `/api/admin/videos`.
+- Team: public `GET /api/team`; admin full CRUD on `/api/admin/team`.
+- Unified feed: `GET /api/works?type=insight|case_study|video` (merges all 3 with `type` + `href`).
+- Site settings: public `GET /api/site-settings`; admin `PUT /api/admin/site-settings`.
+- Media: admin `POST /api/admin/media/upload` (multipart, max 8 MB, folders=team|blog|videos|logos|uploads) → returns `{path,url}`; public `GET /api/media/{path}` streams via 1h in-memory cache. Backend = `/app/backend/github_storage.py` (GitHub Contents API).
+- Leads CSV export: `GET /api/admin/leads-export.csv` (admin auth required, UTF-8 BOM, attachment header).
+- Admin auth/reset: `POST /api/admin/login`, `POST /api/admin/forgot-password`, `GET /api/admin/reset-password/{token}`, `POST /api/admin/reset-password`.
 - Stats: `GET /api/admin/stats` (leads, posts, case-studies, invoices breakdown)
 - Email status: `GET /api/admin/email-status`
 - **Invoices**:
@@ -68,23 +83,26 @@ Rebuild the entire MIR Consulting website from scratch — a premium, scalable, 
 ## Verified Functionality
 - **Iteration 1** MVP — passed.
 - **Iteration 2** CMS + leads + rate-limit + SEO — 27/27 backend, all frontend flows passed.
-- **Iteration 3** Invoices + Gmail SMTP scaffolding + i18n EN/DE/ES — **46/46 backend tests (19 new + 27 regression), all frontend flows passed**, zero bugs found (`/app/test_reports/iteration_3.json`).
+- **Iteration 3** Invoices + Gmail SMTP scaffolding + i18n EN/DE/ES — 46/46 backend tests, all frontend flows passed.
+- **Iteration 4** Admin password reset (bcrypt + magic-link) — 13/13 backend cases, frontend forgot-password dialog + `/admin/reset/:token` page verified.
+- **Iteration 5** Team CRUD + Videos (YouTube) + unified `/our-work` + Site Settings (logo) + GitHub-backed media upload + Lead CSV export + axios 401 interceptor — 20/20 backend cases, all frontend flows verified.
 
 ## Credentials & Secrets
-- `/app/memory/test_credentials.md` — admin password `mir-admin-2025`.
-- Backend `.env`: `ADMIN_PASSWORD`, `ADMIN_TOKEN`, `MONGO_URL`, `DB_NAME`, `CORS_ORIGINS`, `COMPANY_EMAIL`, `SMTP_*` (App Password TODO), `PUBLIC_BASE_URL` (optional public-view base).
+- `/app/memory/test_credentials.md` — admin password `mir-admin-2026` (DB-stored bcrypt; `.env` `ADMIN_PASSWORD` is bootstrap-only).
+- Backend `.env`: `ADMIN_PASSWORD`, `ADMIN_TOKEN`, `MONGO_URL`, `DB_NAME`, `CORS_ORIGINS`, `COMPANY_EMAIL`, `SMTP_*` (live), `PUBLIC_BASE_URL`, `GITHUB_TOKEN`, `GITHUB_REPO`, `GITHUB_BRANCH`.
 
 ## Changelog
 - 2025-12 — MVP site (pages, contact form, basic admin).
 - 2026-02 (a) — Full CMS for Insights + Case Studies, lead status workflow + drawer + delete, rate-limiting, SEO basics, markdown live preview, typography plugin, CaseStudyDetail page.
 - 2026-02 (b) — Invoice module (multi-currency, ReportLab PDF, download + public token view + email send), Gmail SMTP integration for new-lead notifications, multi-language site (EN/DE/ES) with globe switcher, stats now include invoice counters.
+- 2026-02 (c) — Admin DB auth migration (bcrypt) with "Forgot password" magic-link reset email via Gmail SMTP and `/admin/reset/:token` page.
+- 2026-06 — Team Members section on About + admin CRUD; Videos (YouTube embed) module + admin CRUD; unified `/our-work` page merging Insights + Case Studies + Videos with category tabs; Site Settings panel + custom logo upload replacing navbar "M"; GitHub-backed media upload (private repo, proxied through `/api/media/{path}` with caching); Lead CSV export; global axios 401 interceptor.
 
 ## Backlog
-- **P0 (owner action)** — Generate a Google App Password and paste into `SMTP_APP_PASSWORD` to activate email notifications + invoice send.
-- **P1** — Set `PUBLIC_BASE_URL` once a domain is decided so invoice emails include a live online-view link.
-- **P2** — LLM-powered auto-translate for CMS articles (Insights / Case Studies) using Emergent Universal Key.
-- **P2** — Lead CSV export.
-- **P2** — Image upload (S3/Cloudinary) instead of URL paste.
-- **P2** — Global axios 401 interceptor.
-- **P3** — Invoice payment integrations (Stripe Checkout link on public invoice page).
+- **P0 (owner action)** — Regenerate GitHub PAT with **Contents: Write** permission on `mirenterprises25-dotcom/Mir-Consultancy` so `/api/admin/media/upload` succeeds (currently returns 502 because the PAT is read-only). UI falls back to "Paste URL" today, so the platform is fully usable in the meantime.
+- **P1** — Set production `PUBLIC_BASE_URL` once a domain is decided so invoice emails include a live online-view link; regenerate `sitemap.xml` / `robots.txt` and canonical SEO tags.
+- **P2** — LLM-powered auto-translate for CMS articles (Insights / Case Studies / Videos) using Emergent Universal Key.
+- **P2** — Refactor: split `server.py` (~1270 lines) into `routers/` modules and `Admin.jsx` (~1740 lines) into separate panel files.
+- **P3** — Invoice payment integrations (Stripe Checkout link on public invoice page; test key already in pod env).
 - **P3** — Tag/category filtering on public Insights index.
+- **P3** — Replace native date inputs in invoice editor with shadcn Calendar/Popover.
