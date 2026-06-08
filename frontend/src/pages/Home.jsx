@@ -8,6 +8,7 @@ import CTASection from "@/components/sections/CTASection";
 import { Section, SectionHeader, StatBlock } from "@/components/sections/Section";
 import { INDUSTRY_TAGS } from "@/lib/content";
 import { Link } from "react-router-dom";
+import Seo from "@/lib/Seo";
 
 const ABOUT_IMAGE =
     "https://images.pexels.com/photos/7108269/pexels-photo-7108269.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940";

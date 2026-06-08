@@ -1,5 +1,8 @@
 User-agent: *
 Allow: /
 Disallow: /admin
+Disallow: /admin/
+Disallow: /admin/reset/
+Disallow: /api/
 
 Sitemap: https://mirconsulting.com/sitemap.xml
