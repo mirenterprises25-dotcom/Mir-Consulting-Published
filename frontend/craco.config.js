@@ -51,6 +51,14 @@ let webpackConfig = {
         ],
       };
 
+      // Strip ForkTsCheckerWebpackPlugin — this codebase is pure JavaScript and the
+      // plugin pulls in a fragile schema-utils/ajv-keywords combo that breaks on
+      // fresh npm installs (e.g. Render/Vercel). Safe to remove since no .ts/.tsx
+      // files exist.
+      webpackConfig.plugins = (webpackConfig.plugins || []).filter(
+        (p) => p && p.constructor && p.constructor.name !== "ForkTsCheckerWebpackPlugin"
+      );
+
       // Add health check plugin to webpack if enabled
       if (config.enableHealthCheck && healthPluginInstance) {
         webpackConfig.plugins.push(healthPluginInstance);
