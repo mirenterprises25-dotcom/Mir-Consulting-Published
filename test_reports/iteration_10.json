@@ -1,0 +1,51 @@
+{
+  "summary": "Frontend regression of Admin.jsx modular refactor + Navbar/Footer dynamic logo wiring. Verified via Playwright against the public preview URL. All 14 scenarios from the review request pass, including the previously untested critical logo-sync between navbar and footer (set custom URL -> both show same src with object-contain; clear logo -> both fall back to data-testid placeholders simultaneously).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/test_reports/iteration_10.json"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Footer.jsx and Navbar.jsx both call fetchSiteSettings() independently on mount. Footer remounts on every route change, so the public site fires 2 /api/site-settings requests per navigation (one from Navbar which is persistent, one from Footer). Consider hoisting site settings into a React context / SWR cache and subscribing in both components. Low-impact (small JSON response) but easy win.",
+    "TOKEN_KEY 'mir_admin_token' is stored in localStorage (XSS-readable). Not a regression from this refactor, but per the auth playbook, httpOnly cookies are preferred. Carried over from iteration_9 review."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "not-retested (40/40 in iteration_8 per request)", "frontend": "100% (14/14 review-request scenarios)"},
+  "test_credentials": "Admin password mir-admin-2026 (from /app/memory/test_credentials.md). Login succeeded; bad password correctly rejected.",
+  "seed_data_creation": "Created 1 TEST_ lead via contact form (name='TEST_Auto Tester', email='test_auto@example.com') and 1 transient logo change. Logo restored to the wikipedia transparency PNG at end of run so the public site has a visible custom logo.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Preview URL: https://mir-consulting-next.preview.emergentagent.com. Admin route /admin (password-only). Site Settings logo input is rendered by MediaUpload (testIdPrefix='logo'): use [data-testid='logo-url-toggle'] -> [data-testid='logo-url-input'] -> [data-testid='logo-url-save'] -> [data-testid='site-settings-save']. Use [data-testid='logo-clear'] to remove. Public-site logo selectors: navbar-logo-img / navbar-logo-placeholder, footer-logo-img / footer-logo-placeholder. fetchSiteSettings runs on mount in both Navbar and Footer; wait ~2.5s after page.goto for hydration. Use wait_until='domcontentloaded' for home page (networkidle hangs). Stripe public payment link / PDF preview not exercised end-to-end (requires Stripe redirect) -- only invoice list rendering was confirmed via tab click.",
+  "detailed_results": {
+    "public_pages": {"/": 200, "/about": 200, "/services": 200, "/industries": 200, "/our-work": 200, "/contact": 200},
+    "language_switch_en_to_de": "nav-link-home text changed 'Home' -> 'Startseite' and back",
+    "contact_form_submit": "Filled name/email/company/phone/message via data-testid selectors; success indicator found on page after submit",
+    "admin_bad_password": "Login screen remained visible (rejected)",
+    "admin_good_password": "Dashboard rendered (admin-dashboard-page)",
+    "stats_cards_present": ["admin-stat-total", "admin-stat-new", "admin-stat-posts", "admin-stat-invoices"],
+    "admin_tabs_clicked": ["leads", "insights", "case-studies", "invoices", "videos", "team", "site-settings"],
+    "logo_sync_custom": {
+      "navbar_img_present": true,
+      "footer_img_present": true,
+      "same_src": true,
+      "src_matches_uploaded_url": true,
+      "navbar_class": "h-9 w-auto max-w-[140px] object-contain",
+      "footer_class": "h-10 w-auto max-w-[160px] object-contain",
+      "aspect_ratio_preserved": true
+    },
+    "logo_sync_cleared": {
+      "navbar_placeholder_present": true,
+      "footer_placeholder_present": true,
+      "navbar_img_absent": true,
+      "footer_img_absent": true,
+      "both_fell_back_simultaneously": true
+    },
+    "change_password_dialog": "Opens from admin-change-password-button",
+    "logout": "Clears mir_admin_token from localStorage and returns to admin-login-page",
+    "console_pageerrors": 0
+  },
+  "rca_of_the_issue": "N/A - no defects. The Admin.jsx modular refactor (1853-line monolith -> /pages/admin/* modules) preserves all behavior, and the new Footer logo wiring matches Navbar's behavior exactly: both fetch /api/site-settings on mount, render <img data-testid='{navbar|footer}-logo-img'> with object-contain when logo_url is truthy, and fall back to <div data-testid='{navbar|footer}-logo-placeholder'> with the 'M' wordmark otherwise. onError handlers also reset both back to the placeholder if the URL fails to load."
+}
