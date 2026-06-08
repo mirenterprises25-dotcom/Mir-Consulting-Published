@@ -4,11 +4,17 @@ import { Link } from "react-router-dom";
 import { ArrowUpRight, Check } from "lucide-react";
 import { Section } from "@/components/sections/Section";
 import CTASection from "@/components/sections/CTASection";
+import Seo from "@/lib/Seo";
 import { SERVICES } from "@/lib/content";
 
 export default function Services() {
     return (
         <div data-testid="services-page" className="bg-mir-bg">
+            <Seo
+                title="Services"
+                path="/services"
+                description="Six integrated MIR Consulting practices: strategy, technology, data & analytics, automation, transformation and intelligence — delivered by senior-only engagement teams."
+            />
             <Section testId="services-hero" className="relative grain-overlay bg-mir-bg">
                 <div className="absolute inset-0 grid-backdrop opacity-40 pointer-events-none [mask-image:radial-gradient(ellipse_at_top_right,_black_30%,_transparent_70%)]" />
                 <div className="absolute -top-32 -right-32 w-[500px] h-[500px] rounded-full halo blur-2xl pointer-events-none" />

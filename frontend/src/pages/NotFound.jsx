@@ -1,10 +1,12 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
+import Seo from "@/lib/Seo";
 
 export default function NotFound() {
     return (
         <div className="min-h-[70vh] flex items-center bg-mir-bg" data-testid="not-found-page">
+            <Seo title="Page not found" description="The page you are looking for does not exist." noIndex />
             <div className="max-w-3xl mx-auto px-6 lg:px-8 text-center">
                 <div className="text-[11px] uppercase tracking-[0.25em] text-mir-blue mb-6">
                     Error 404

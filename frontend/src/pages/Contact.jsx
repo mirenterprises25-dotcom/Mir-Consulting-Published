@@ -14,6 +14,7 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { submitLead } from "@/lib/api";
+import Seo from "@/lib/Seo";
 
 const INDUSTRIES = [
     "Hospitality",
@@ -89,6 +90,11 @@ export default function Contact() {
 
     return (
         <div data-testid="contact-page" className="bg-mir-bg">
+            <Seo
+                title="Contact"
+                path="/contact"
+                description="Tell us about your operating challenge. A senior MIR Consulting partner will respond — usually within one business day."
+            />
             <Section testId="contact-hero" className="relative grain-overlay bg-mir-bg">
                 <div className="absolute inset-0 grid-backdrop opacity-40 pointer-events-none [mask-image:radial-gradient(ellipse_at_top_right,_black_30%,_transparent_70%)]" />
                 <div className="absolute -top-32 -right-32 w-[500px] h-[500px] rounded-full halo blur-2xl pointer-events-none" />

@@ -4,6 +4,7 @@ import { ArrowUpRight } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Section } from "@/components/sections/Section";
 import CTASection from "@/components/sections/CTASection";
+import Seo from "@/lib/Seo";
 import { INDUSTRIES } from "@/lib/content";
 
 const IMAGES = {
@@ -24,6 +25,11 @@ const IMAGES = {
 export default function Industries() {
     return (
         <div data-testid="industries-page" className="bg-mir-bg">
+            <Seo
+                title="Industries"
+                path="/industries"
+                description="Operational depth across hospitality, retail, logistics, manufacturing, technology and SMEs — discover how MIR Consulting tailors strategy and intelligence to each sector."
+            />
             <Section testId="industries-hero" className="relative grain-overlay bg-mir-bg">
                 <div className="absolute inset-0 grid-backdrop opacity-40 pointer-events-none [mask-image:radial-gradient(ellipse_at_top_right,_black_30%,_transparent_70%)]" />
                 <div className="absolute -top-32 -right-32 w-[500px] h-[500px] rounded-full halo blur-2xl pointer-events-none" />

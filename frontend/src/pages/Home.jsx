@@ -8,6 +8,7 @@ import CTASection from "@/components/sections/CTASection";
 import { Section, SectionHeader, StatBlock } from "@/components/sections/Section";
 import { INDUSTRY_TAGS } from "@/lib/content";
 import { Link } from "react-router-dom";
+import Seo from "@/lib/Seo";
 
 const ABOUT_IMAGE =
     "https://images.pexels.com/photos/7108269/pexels-photo-7108269.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940";
@@ -38,6 +39,18 @@ const WHY = [
 export default function Home() {
     return (
         <div data-testid="home-page" className="bg-mir-bg">
+            <Seo
+                path="/"
+                description="MIR Consulting delivers premium strategy, technology and intelligence services — building tailored automations, analytics and digital transformation programmes for enterprises across finance, energy, healthcare and the public sector."
+                schema={{
+                    "@context": "https://schema.org",
+                    "@type": "Organization",
+                    name: "MIR Consulting",
+                    url: typeof window !== "undefined" ? window.location.origin : "",
+                    logo: "/og-cover.jpg",
+                    sameAs: [],
+                }}
+            />
             <Hero />
 
             <Section testId="trust-indicators-section" className="!py-16 border-t border-mir-border bg-mir-bg">

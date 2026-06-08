@@ -4,6 +4,7 @@ import { Section, SectionHeader, StatBlock } from "@/components/sections/Section
 import CTASection from "@/components/sections/CTASection";
 import { Compass, Target, Eye, HeartHandshake } from "lucide-react";
 import TeamSection from "@/components/sections/TeamSection";
+import Seo from "@/lib/Seo";
 
 const PILLARS = [
     {
@@ -31,6 +32,11 @@ const PILLARS = [
 export default function About() {
     return (
         <div data-testid="about-page" className="bg-mir-bg">
+            <Seo
+                title="About"
+                path="/about"
+                description="Meet the senior team behind MIR Consulting — pragmatic builders bridging business operations, technology and data intelligence for ambitious enterprises."
+            />
             <Section testId="about-hero" className="relative grain-overlay bg-mir-bg">
                 <div className="absolute inset-0 grid-backdrop opacity-40 pointer-events-none [mask-image:radial-gradient(ellipse_at_top_left,_black_30%,_transparent_70%)]" />
                 <div className="absolute -top-40 -left-40 w-[500px] h-[500px] rounded-full halo blur-2xl pointer-events-none" />

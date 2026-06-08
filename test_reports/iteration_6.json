@@ -1,0 +1,49 @@
+{
+  "summary": "Iteration 6 verifies the two new fixes since iter5: (1) GitHub-backed media upload now works END-TO-END with the new PAT/repo (mirenterprises25-dotcom/Mir-Consulting-Published) and (2) site-wide SEO meta tags are correctly applied via react-helmet-async on all public pages and admin pages are marked noindex,nofollow. Backend pytest: 4/4 passed in /app/backend/tests/test_github_upload_and_seo.py — POST /api/admin/media/upload with a real 1x1 PNG (folder=logos) returned 200 with {path:'logos/...', url:'/api/media/logos/...'}, then GET /api/media/{path} returned 200 with Content-Type image/png and the exact bytes back (PNG signature verified). 401 on missing token and 400 on disallowed folder also pass; path traversal '/api/media/../etc/passwd' returns 400/404. Frontend SEO checks (Playwright + document.querySelector on hydrated DOM): all 6 public pages (/, /about, /services, /industries, /contact, /our-work) have EXACTLY 1 <meta name=description>, title contains 'MIR Consulting' (home uses tagline, others use 'Page | MIR Consulting'), canonical points at mirconsulting.com/<path>, hreflang en/de/es/x-default all present, og:title/og:description/og:image all set, twitter:card=summary_large_image, at least 1 JSON-LD <script> (home has 2: static WebSite + dynamic Organization). Both /admin and /admin/reset/some-token have meta robots='noindex,nofollow'. The static <meta name=description> + og: tags were correctly removed from /app/frontend/public/index.html so no duplicates exist. Admin UI media upload via Playwright also succeeded: logged in with mir-admin-2026 → clicked Site tab → set the file input on the Company Logo MediaUpload widget → after 8s the preview img.src was https://mir-consulting-next.preview.emergentagent.com/api/media/logos/test-admin-upload-5fd0b3f4.png (rendered as a red square as expected).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Admin > New invoice editor", "issues": ["(carryover from iter3/4/5) Date inputs still use browser-native <input type=date> instead of shadcn Calendar/Popover."]},
+      {"screen": "Admin > Case Studies tab", "issues": ["(carryover from iter3/4/5) Typo 'New case studie' should be 'New case study'."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_github_upload_and_seo.py",
+    "/app/test_reports/pytest/pytest_iteration6.xml"
+  ],
+  "action_items": [
+    "No new code changes required — both new features (GitHub media upload + site-wide SEO) are fully working in production preview.",
+    "(Cosmetic carryover) Fix native date pickers → shadcn Calendar/Popover in invoice editor.",
+    "(Cosmetic carryover) Fix 'New case studie' typo in admin Case Studies tab.",
+    "(Code hygiene carryover) /app/backend/server.py is ~1270 lines; consider splitting into routers/."
+  ],
+  "critical_code_review_comments": [
+    "github_storage.upload_file correctly uses base64-encoded PUT to Contents API with branch=main and returns {path, url:/api/media/...}; fetch_file uses Accept: application/vnd.github.raw which sidesteps the 1MB base64 limit — good.",
+    "fetch_file has a 1h in-memory cache with eviction at MAX_CACHE_ENTRIES=200 — fine. Note: cache is per-process; if you scale to multiple workers cache hit-rate drops but correctness is preserved.",
+    "/api/media/{path} blocks '..' traversal at the route handler (line ~935) and sets Cache-Control: public, max-age=86400, immutable — appropriate for content-addressable URLs (uuid suffix on _safe_filename).",
+    "Seo.jsx uses <Helmet prioritizeSeoTags> from react-helmet-async — needed because the React SPA hydrates after the initial HTML; tested OK via networkidle + 800ms wait. The static <title> in index.html is replaced once Helmet runs.",
+    "index.html still keeps one static WebSite JSON-LD (good — gives crawlers something pre-hydration) and the home page adds an Organization JSON-LD via Seo schema prop. Both render → 2 ld+json scripts on /. Other pages get 1 each — fine.",
+    "Admin pages (Admin.jsx, AdminResetPassword.jsx, NotFound.jsx) pass noIndex=true to Seo which renders <meta name=robots content=noindex,nofollow> — verified on both /admin and /admin/reset/some-token.",
+    "Canonical/hreflang uses REACT_APP_SITE_URL=https://mirconsulting.com (from /app/frontend/.env) — correct production domain even when previewing on emergentagent.com.",
+    "MediaUpload widget set_input_files → backend → GitHub PUT → re-fetch via /api/media/ works in <8s for a 1x1 PNG — latency dominated by GitHub PUT + first proxy fetch; subsequent requests hit the 1h read cache.",
+    "(Carryover) server.py is now ~1270 lines — should be split before more endpoints are added."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_github_upload_and_seo.py (new — 4 cases: upload+fetch e2e, auth required, bad folder, path traversal)"
+  ],
+  "success_rate": {
+    "backend": "100% (4/4 new pytest cases)",
+    "frontend": "100% (6/6 public pages have correct title/desc/canonical/hreflang/OG/JSON-LD; 2/2 admin pages have noindex,nofollow; admin Site Settings MediaUpload widget uploads and renders the proxied image successfully)"
+  },
+  "test_credentials": "Admin password: mir-admin-2026 (verified live this iteration). Static admin bearer: mir-admin-static-token-d7f3a91b5e6c4a8f.",
+  "seed_data_creation": "One real PNG was uploaded to the GitHub repo mirenterprises25-dotcom/Mir-Consulting-Published under logos/ as a side-effect of the e2e test (file is harmless — 70-byte 1x1 red PNG with random uuid suffix). The admin Site Settings PUT was NOT triggered, so site logo_url remains unchanged in DB. Owner may want to prune /logos/test-*.png from the published repo periodically.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "GitHub upload + SEO are both green. The new repo+token (Mir-Consulting-Published with Contents:Write) is the working config; do NOT change /app/backend/.env GITHUB_TOKEN/GITHUB_REPO. If retesting SEO, use wait_until='domcontentloaded' + 800-2500ms wait_for_timeout (NOT 'networkidle' — home page has long-polling/analytics that prevents networkidle). REACT_APP_SITE_URL=https://mirconsulting.com drives canonical/hreflang to the production domain. The single static <script type=application/ld+json> in index.html (WebSite schema) means home has 2 ld+json scripts; all other pages have 1 each — both fine.",
+  "rca_of_the_issue": "N/A — both fixes from this iteration are verified working. The iter5 502 on /api/admin/media/upload is now RESOLVED (token + repo issue fixed by owner)."
+}

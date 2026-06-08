@@ -19,6 +19,7 @@ import Contact from "@/pages/Contact";
 import Admin from "@/pages/Admin";
 import AdminResetPassword from "@/pages/AdminResetPassword";
 import NotFound from "@/pages/NotFound";
+import PublicInvoice from "@/pages/PublicInvoice";
 
 function App() {
     return (
@@ -48,6 +49,7 @@ function App() {
                         </Route>
                         <Route path="/admin" element={<Admin />} />
                         <Route path="/admin/reset/:token" element={<AdminResetPassword />} />
+                        <Route path="/invoice/:token" element={<PublicInvoice />} />
                     </Routes>
                 </BrowserRouter>
                 <Toaster

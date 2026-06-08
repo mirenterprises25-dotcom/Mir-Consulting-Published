@@ -6,6 +6,7 @@ import { Loader2, ShieldCheck, ArrowLeft, CheckCircle2, AlertTriangle } from "lu
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { validateResetToken, resetPassword } from "@/lib/api";
+import Seo from "@/lib/Seo";
 
 const inputCls =
     "bg-white border-mir-border rounded-none focus-visible:ring-mir-blue focus-visible:ring-offset-0 focus-visible:border-mir-blue text-mir-text";
@@ -48,6 +49,7 @@ export default function AdminResetPassword() {
             data-testid="admin-reset-page"
             className="min-h-screen bg-mir-surface flex items-center justify-center px-6 grain-overlay relative"
         >
+            <Seo title="Reset Admin Password" path="/admin/reset" noIndex />
             <div className="absolute inset-0 grid-backdrop opacity-40 [mask-image:radial-gradient(ellipse_at_center,_black_30%,_transparent_70%)] pointer-events-none" />
             <div className="absolute top-6 left-6 z-10">
                 <Link

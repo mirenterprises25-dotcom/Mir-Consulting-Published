@@ -229,3 +229,26 @@ export const downloadLeadsCsv = async (token) => {
     a.remove();
     window.URL.revokeObjectURL(url);
 };
+
+// ====== PUBLIC INVOICE + STRIPE CHECKOUT ======
+export const fetchPublicInvoice = (publicToken) =>
+    api.get(`/invoices/public/${publicToken}`).then((r) => r.data);
+export const createInvoiceCheckout = (publicToken, originUrl) =>
+    api
+        .post(`/invoices/public/${publicToken}/checkout`, { origin_url: originUrl })
+        .then((r) => r.data);
+export const invoiceCheckoutStatus = (publicToken, sessionId) =>
+    api
+        .get(`/invoices/public/${publicToken}/checkout/${sessionId}`)
+        .then((r) => r.data);
+
+// ====== ADMIN: TRANSLATE ======
+export const adminTranslate = (token, text, target_lang, source_lang = "auto") =>
+    api
+        .post(
+            "/admin/translate",
+            { text, target_lang, source_lang },
+            { headers: authHeader(token) },
+        )
+        .then((r) => r.data);
+

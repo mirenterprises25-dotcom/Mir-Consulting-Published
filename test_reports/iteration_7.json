@@ -1,0 +1,43 @@
+{
+  "summary": "Iteration 7 acceptance: 12/12 backend pytest cases PASS and all frontend flows verified working end-to-end. Tested: (1) Stripe Checkout — POST /api/invoices/public/{token}/checkout returns {url:'https://checkout.stripe.com/...', session_id:'cs_test_...'} for a $100+10%tax=$110 invoice; GET /api/invoices/public/{token}/checkout/{sid} returns status='open' payment_status='unpaid' (no real card was used); idempotent on repeat. (2) LLM translate — POST /api/admin/translate works for de/es/en via Emergent LLM key + gemini-2.5-flash and PRESERVES markdown (## headings & - bullets). 401 returned when no admin auth. (3) Public invoice page /invoice/{token} renders data-testid='public-invoice-page', shows INV-2026-0004, $110.00 total, Pay $110.00 Online button (data-testid='public-invoice-pay') AND Download PDF (data-testid='public-invoice-download'). Clicking Pay redirects to checkout.stripe.com successfully. (4) Admin Insights editor → 'AI translate to DE/ES/EN' toolbar (data-testid='admin-editor-translate-bar' + ...-de/-es/-en) — clicking translate-de translated TITLE 'Hello world about AI consulting' → 'Hallo Welt über KI-Beratung' and CONTENT '## Heading\\n\\nThis is a quick test article about strategy.' → '## Überschrift\\n\\nDies ist ein schneller Testartikel über Strategie.' within ~10s with markdown preserved. (5) Admin Invoices NEW form has shadcn DatePicker buttons (data-testid='admin-invoice-issue-date' / '...-due-date'); clicking opens a Calendar popover (June 2026 grid), picking 15 sets button label to 'June 15th, 2026'. NO native <input type=date>. (6) Typo fixes verified — buttons read 'New case study' (not 'New case studie') and 'New insight'. (7) /our-work topic filter row [data-testid='our-work-categories'] visible with chips ('ALL' + 'Conference') and clicking a chip filters the grid. Regressions OK: GitHub upload + media fetch (logos/iter7_test.png, 200 OK, PNG signature verified).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/admin/translate", "issue": "Emergent LLM key budget on gemini-2.5-flash is very small (max_budget=0.001 USD). The Spanish translation initially failed once with 502 'Budget has been exceeded! Current cost: 0.0011238, Max budget: 0.001'. Retry succeeded — appears the budget is per-call/per-window. May cause intermittent 502 on busy days. Owner may want to ask Emergent to raise budget for gemini-2.5-flash."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "PostEditor (Insights/Case Studies)", "issues": ["Translate success toast was not visible in DOM after 12s — translation worked (fields updated correctly with German text) but the 'Translated to DE' confirmation toast either rendered & dismissed too fast for the test to capture, or is not rendered via Sonner. NOT a blocker but worth confirming Toaster is mounted at the editor level."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration7_stripe_translate.py",
+    "/app/test_reports/pytest/pytest_iteration7.xml"
+  ],
+  "action_items": [
+    "(Optional) Ask Emergent to raise the gemini-2.5-flash max_budget per call — current 0.001 USD can fail for ~200 token translation requests.",
+    "(Optional) Verify Sonner <Toaster /> is mounted on the admin /admin route so the 'Translated to DE/ES/EN' toast is visible to the user (test detected an empty toast container)."
+  ],
+  "critical_code_review_comments": [
+    "Stripe checkout endpoint correctly persists payment_transactions row before returning {url, session_id} — good for reconciliation.",
+    "invoice_checkout_status() is idempotent: only flips invoices.status to 'paid' on the first transition from non-paid → paid (checks txn.payment_status != 'paid' before updating). Good.",
+    "Stripe webhook handler at POST /api/webhook/stripe validates signature via stripe_service.handle_webhook before flipping status — good defence against replay.",
+    "POST /api/admin/translate returns 502 with the litellm budget-exceeded error verbatim in detail. Consider catching BudgetExceeded specifically and returning 429 + retry-after so the UI can show a friendlier 'Translation temporarily unavailable, please try again' message.",
+    "Admin.jsx 'newLabel' is correctly computed for both 'case study' and 'insight' singulars. Typo regression risk: verify the same logic when adding a 4th content type (e.g., 'video') so labels don't accidentally regress.",
+    "InvoicesPanel.jsx uses the DatePicker that returns ISO 'YYYY-MM-DD' strings to match backend InvoiceCreate.issue_date/due_date which are typed as `str`. Verified by clicking → calendar popover → day → button text updates (no submission tested but binding is correct via shadcn forms).",
+    "/app/backend/server.py is ~1407 lines — should be split into routers (admin_router, invoice_router, stripe_router, translate_router, media_router) before more endpoints are added. Carryover from iter5/6."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration7_stripe_translate.py (new — 12 cases: invoice CRUD + Stripe checkout + status + idempotency + bad-token + 3-language translate + auth check + empty-text + GitHub upload regression)"
+  ],
+  "success_rate": {"backend": "100% (12/12)", "frontend": "100% (all 6 in-scope flows verified: public invoice page, Stripe redirect, admin translate, DatePicker popover, typo fixes, /our-work category filter)"},
+  "test_credentials": "Admin password: mir-admin-2026 — verified live this iteration.",
+  "seed_data_creation": "Created 2 test invoices in DB (TEST_Stripe Client INV-2026-0003 via pytest, TEST_Frontend Stripe INV-2026-0004 via Playwright) — both DRAFT, never paid. 2 payment_transactions rows in 'open' state. 1 additional PNG uploaded to GitHub repo at logos/iter7_test-*.png. Owner may prune these.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All iter7 features confirmed working as of 2026-01. Reusable backend test at /app/backend/tests/test_iteration7_stripe_translate.py — covers Stripe + translate + GitHub regression. InvoiceCreate payload requires fields: client_name, client_email, currency, tax_rate, issue_date (YYYY-MM-DD), due_date, line_items=[{description,quantity,rate}] (NOT 'unit_price' or 'items'). Public invoice URL is /invoice/{token} (NOT /invoices/{token}). For DatePicker testing: the testid is on the BUTTON tag (type='button'), not on a native input — click it to open the popover and look for [role='gridcell'] day buttons. Sonner toast container should be checked at editor mount.",
+  "rca_of_the_issue": "Initial backend test failed twice on invoice schema (used wrong field names: 'items' instead of 'line_items', 'unit_price' instead of 'rate', missing issue_date/due_date). Reading InvoiceCreate model in server.py:641 clarified the contract. Fixed in test file and all 12 cases passed."
+}

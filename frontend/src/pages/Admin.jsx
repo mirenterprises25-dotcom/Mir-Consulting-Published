@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import Seo from "@/lib/Seo";
 import {
     Loader2,
     LogOut,
@@ -25,6 +26,7 @@ import {
     UserCircle2,
     PlayCircle,
     Settings,
+    Sparkles,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -80,6 +82,7 @@ import {
     forgotPassword,
     changePassword,
     downloadLeadsCsv,
+    adminTranslate,
 } from "@/lib/api";
 import InvoicesPanel from "@/pages/admin/InvoicesPanel";
 import TeamPanel from "@/pages/admin/TeamPanel";
@@ -148,15 +151,25 @@ export default function Admin() {
     };
 
     if (!token) {
-        return <LoginScreen
-            password={password}
-            setPassword={setPassword}
-            onLogin={onLogin}
-            loading={loggingIn}
-        />;
+        return (
+            <>
+                <Seo title="Admin Sign In" path="/admin" noIndex />
+                <LoginScreen
+                    password={password}
+                    setPassword={setPassword}
+                    onLogin={onLogin}
+                    loading={loggingIn}
+                />
+            </>
+        );
     }
 
-    return <Dashboard token={token} onLogout={logout} onAuthExpired={logout} />;
+    return (
+        <>
+            <Seo title="Admin Dashboard" path="/admin" noIndex />
+            <Dashboard token={token} onLogout={logout} onAuthExpired={logout} />
+        </>
+    );
 }
 
 // -------------------------------------------------------------
@@ -1078,6 +1091,7 @@ function PostsPanel({ token, onAuthExpired, onChange }) {
     if (editing) {
         return (
             <PostEditor
+                token={token}
                 initial={editing === "new" ? EMPTY_POST : editing}
                 kind="post"
                 onCancel={() => setEditing(null)}
@@ -1188,6 +1202,7 @@ function CaseStudiesPanel({ token, onAuthExpired, onChange }) {
     if (editing) {
         return (
             <PostEditor
+                token={token}
                 initial={editing === "new" ? EMPTY_CS : editing}
                 kind="case_study"
                 onCancel={() => setEditing(null)}
@@ -1238,6 +1253,7 @@ function StatusPill({ status }) {
 
 function ContentList({
     title,
+    singular,
     testIdPrefix,
     items,
     loading,
@@ -1250,6 +1266,12 @@ function ContentList({
     setConfirmDel,
     doDelete,
 }) {
+    const newLabel = (
+        singular ||
+        (title.toLowerCase().endsWith("ies")
+            ? title.slice(0, -3).toLowerCase() + "y"
+            : title.replace(/s$/i, "").toLowerCase())
+    );
     return (
         <div className="border border-mir-border bg-white">
             <div className="px-6 py-5 border-b border-mir-border flex items-center justify-between">
@@ -1267,7 +1289,7 @@ function ContentList({
                     className={btnPrimary}
                 >
                     <Plus className="w-4 h-4" />
-                    New {title.slice(0, -1).toLowerCase()}
+                    New {newLabel}
                 </button>
             </div>
 
@@ -1354,7 +1376,7 @@ function ContentList({
 }
 
 // -------------------------------------------------------------
-function PostEditor({ initial, kind, onCancel, onSave }) {
+function PostEditor({ token, initial, kind, onCancel, onSave }) {
     const [form, setForm] = React.useState(() => ({
         ...initial,
         outcomes_text:
@@ -1363,10 +1385,37 @@ function PostEditor({ initial, kind, onCancel, onSave }) {
                 : "",
     }));
     const [saving, setSaving] = React.useState(false);
+    const [translating, setTranslating] = React.useState(false);
     const isCS = kind === "case_study";
     const isEdit = !!initial.id;
 
     const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
+
+    const translateAll = async (targetLang) => {
+        if (translating) return;
+        setTranslating(true);
+        const t = toast.loading(`Translating to ${targetLang.toUpperCase()}…`);
+        try {
+            const fields = isCS
+                ? ["title", "sector", "summary", "content"]
+                : ["title", "category", "excerpt", "content"];
+            const out = {};
+            for (const f of fields) {
+                const v = (form[f] || "").trim();
+                if (!v) continue;
+                // eslint-disable-next-line no-await-in-loop
+                const { translated } = await adminTranslate(token, v, targetLang, "auto");
+                out[f] = translated;
+            }
+            setForm((p) => ({ ...p, ...out }));
+            toast.success(`Translated to ${targetLang.toUpperCase()}. Review and save as a new article.`, { id: t });
+        } catch (e) {
+            const msg = e?.response?.data?.detail || "Translation failed.";
+            toast.error(typeof msg === "string" ? msg : "Translation failed.", { id: t });
+        } finally {
+            setTranslating(false);
+        }
+    };
 
     const submit = async (status) => {
         const base = {
@@ -1461,6 +1510,49 @@ function PostEditor({ initial, kind, onCancel, onSave }) {
                         Publish
                     </button>
                 </div>
+            </div>
+
+            <div
+                className="px-6 py-3 border-b border-mir-border bg-mir-surface flex items-center gap-3 flex-wrap"
+                data-testid="admin-editor-translate-bar"
+            >
+                <Sparkles className="w-4 h-4 text-mir-blue" />
+                <span className="text-[11px] uppercase tracking-[0.2em] text-mir-muted">
+                    AI translate this article to
+                </span>
+                <button
+                    type="button"
+                    onClick={() => translateAll("de")}
+                    disabled={translating}
+                    data-testid="admin-editor-translate-de"
+                    className="inline-flex items-center gap-2 px-3 py-1.5 border border-mir-border bg-white text-[11px] uppercase tracking-[0.2em] hover:border-mir-blue hover:text-mir-blue transition-colors disabled:opacity-50"
+                >
+                    {translating ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                    Deutsch (DE)
+                </button>
+                <button
+                    type="button"
+                    onClick={() => translateAll("es")}
+                    disabled={translating}
+                    data-testid="admin-editor-translate-es"
+                    className="inline-flex items-center gap-2 px-3 py-1.5 border border-mir-border bg-white text-[11px] uppercase tracking-[0.2em] hover:border-mir-blue hover:text-mir-blue transition-colors disabled:opacity-50"
+                >
+                    {translating ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                    Español (ES)
+                </button>
+                <button
+                    type="button"
+                    onClick={() => translateAll("en")}
+                    disabled={translating}
+                    data-testid="admin-editor-translate-en"
+                    className="inline-flex items-center gap-2 px-3 py-1.5 border border-mir-border bg-white text-[11px] uppercase tracking-[0.2em] hover:border-mir-blue hover:text-mir-blue transition-colors disabled:opacity-50"
+                >
+                    {translating ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                    English (EN)
+                </button>
+                <span className="text-[10px] text-mir-muted ml-2">
+                    Tip: translate then change the slug and save as a new article.
+                </span>
             </div>
 
             <div className="p-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
