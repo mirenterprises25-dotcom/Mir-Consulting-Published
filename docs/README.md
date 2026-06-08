@@ -24,6 +24,7 @@ This folder is laid out so a brand-new engineer can be productive in under 30 mi
 | **[10-deployment.md](./10-deployment.md)** | Production deploy checklist, domain & SEO go-live. |
 | **[11-changelog.md](./11-changelog.md)** | What's been built so far, chronologically. |
 | **[12-faq.md](./12-faq.md)** | Common questions & gotchas. |
+| **[13-portability.md](./13-portability.md)** | Moving off Emergent: drop-in replacements + step-by-step migration recipe. |
 
 ## 🚀 30-second orientation
 

@@ -1,0 +1,39 @@
+{
+  "summary": "Frontend-only regression after Admin.jsx refactor (1853-line split into /pages/admin/* modules) and footer logo wiring. All 18 review-request scenarios verified end-to-end via Playwright against the public preview URL. Admin login, all 7 tabs, stats, leads panel + drawer, post editor + AI translate bar (EN/DE/ES), case-study editor (singular label confirmed), change-password dialog, forgot-password dialog, sign-out token cleanup, navbar/footer logo from site-settings, and all public pages all pass. Zero pageerror events. Backend already 40/40 in iteration_8 — not re-tested per request.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/test_reports/iteration_9.json"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Footer's fetchSiteSettings runs on every footer mount (every public page navigation). Consider hoisting site-settings into a React context or SWR cache so we issue one /api/site-settings request per session instead of one per page. Currently low-impact since the request is small, but a minor optimization.",
+    "Admin.jsx auth shell stores the bearer token in localStorage (TOKEN_KEY='mir_admin_token'). XSS-readable; not a regression from this refactor but worth noting per the auth-testing playbook (httpOnly cookies preferred). Out of scope for this iteration."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "not-tested (40/40 in iteration_8)", "frontend": "100% (18/18 scenarios)"},
+  "test_credentials": "Admin password mir-admin-2026 (from /app/memory/test_credentials.md) — login succeeded.",
+  "seed_data_creation": "None. Used existing 29 leads, 0 published posts, 0 outstanding invoices.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Refactor verified clean. Public preview URL: https://mir-consulting-next.preview.emergentagent.com. Admin route: /admin (password-only). Logo currently uploaded at /api/media/logos/Update-Gradient-Colors-Black-Red-Blue-735c96ee.png — both navbar (h-9 w-auto max-w-[140px] object-contain) and footer (h-10 w-auto max-w-[160px] object-contain) consume it via fetchSiteSettings. Stats showed 29 leads / 29 new / 0 posts / 0 invoices. Note: page.goto with wait_until='networkidle' on the homepage times out (likely a long-lived background poll/socket); use 'domcontentloaded' or 'load' instead.",
+  "detailed_results": {
+    "homepage_logos": {"navbar_img_present": true, "footer_img_present": true, "placeholder_shown": false, "same_src": true, "navbar_class": "h-9 w-auto max-w-[140px] object-contain", "footer_class": "h-10 w-auto max-w-[160px] object-contain"},
+    "public_pages_status": {"/about": 200, "/services": 200, "/our-work": 200, "/contact": 200, "/case-studies": 200},
+    "admin_login": "OK — token stored, dashboard rendered (data-testid admin-dashboard-page)",
+    "admin_tabs_clicked": ["leads", "insights", "case-studies", "invoices", "videos", "team", "site-settings"],
+    "stats_values": {"total_leads": 29, "new_leads": 29, "posts_published": 0, "invoices_outstanding": 0},
+    "leads_panel": {"table": true, "search_input_typeable": true, "status_filter": true, "refresh_btn": true, "csv_export_btn": true, "view_buttons_count": 29},
+    "lead_drawer": {"opens": true, "notes_textarea": true, "save_notes_btn": true, "create_invoice_btn": true},
+    "post_editor": {"opens_from_new_insight": true, "translate_bar_visible": true, "en_de_es_buttons": true, "save_draft_btn": true, "publish_btn": true},
+    "case_study_editor": {"singular_label_used": true, "plural_typo_absent": true, "editor_opens": true},
+    "site_settings_panel": "Rendered (data-testid site-settings-panel)",
+    "change_password_dialog": "Opens from admin-change-password-button",
+    "forgot_password_dialog": "Opens from admin-forgot-password-link (login screen)",
+    "sign_out": "Clears localStorage token and returns to login screen",
+    "js_pageerrors": 0
+  },
+  "rca_of_the_issue": "N/A — no issues found in this regression."
+}
